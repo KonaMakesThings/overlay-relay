@@ -1,0 +1,13 @@
+# Local runtime configuration may contain API keys or channel details.
+overlay-config.json
+
+# Generated process state.
+overlay-server.pid
+
+# Common local/editor noise.
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
+

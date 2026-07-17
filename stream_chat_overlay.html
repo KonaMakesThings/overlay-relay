@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Chat Overlay</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto:wght@400;700&family=Open+Sans:wght@400;700&family=Nunito:wght@400;700&family=Poppins:wght@400;600&family=Oswald&display=swap" rel="stylesheet">
+<style>
+/* ─── Root & reset ─────────────────────────────────── */
+:root{
+  --ff:'Inter',sans-serif;--fs:14px;--op:1;
+  --twbg:rgba(160,120,210,.15);--ytbg:rgba(200,90,90,.15);
+  --sh:1px 1px 3px rgba(0,0,0,.9);--rad:4px;--gap:4px;--cw:100%;
+  --panel:#0e0c1a;--accent:#7c4dff;--card:rgba(255,255,255,.03);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;background:transparent;overflow:hidden}
+body.preview-bg{background:#0b0a15!important}
+
+/* ─── Chat ──────────────────────────────────────────── */
+#chat{
+  position:fixed;bottom:0;top:0;width:var(--cw);
+  display:flex;flex-direction:column;justify-content:flex-end;
+  padding:8px;gap:var(--gap);overflow:hidden;pointer-events:none;
+  transition:width .3s;
+}
+#chat.pos-left{left:0;right:auto;transform:none}
+#chat.pos-right{right:0;left:auto;transform:none}
+#chat.pos-center{left:50%;transform:translateX(-50%)}
+
+.msg{
+  display:flex;align-items:center;flex-wrap:wrap;gap:3px;
+  padding:5px 10px;border-radius:var(--rad);
+  font-family:var(--ff);font-size:var(--fs);line-height:1.55;
+  opacity:var(--op);color:#eee;text-shadow:var(--sh);
+  animation:popin .2s ease;transition:opacity .8s;
+  word-break:break-word;width:100%;
+}
+.msg.dying{opacity:0!important}
+.msg.twitch{background:var(--twbg)}.msg.youtube{background:var(--ytbg)}
+.badges{display:inline-flex;align-items:center;gap:2px;flex-shrink:0;align-self:flex-start;margin-top:.2em}
+.badges img{width:1.15em;height:1.15em;vertical-align:middle;object-fit:contain}
+.plat{font-size:.57em;border-radius:3px;padding:1px 4px;flex-shrink:0;opacity:.5;letter-spacing:.5px;font-weight:700;align-self:flex-start;margin-top:.32em}
+.uname{font-weight:700;flex-shrink:0;max-width:var(--nw,none);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;align-self:flex-start;margin-top:.15em}
+.colon{margin-right:2px;opacity:.4;flex-shrink:0;align-self:flex-start;margin-top:.15em}
+.text{word-break:break-word;flex:1;font-weight:var(--tfw,400)}
+.text img.emote{width:1.6em;height:1.6em;vertical-align:middle;margin:0 1px}
+.msg.bold-names .uname{font-weight:800}
+@keyframes popin{from{opacity:0;transform:translateY(5px) scale(.98)}to{opacity:var(--op);transform:none}}
+
+/* ─── Overlay status dot (visible in OBS) ───────────── */
+#obs-dot{
+  position:fixed;top:8px;left:8px;z-index:800;
+  width:10px;height:10px;border-radius:50%;
+  background:var(--accent);pointer-events:none;
+  animation:pulse 3s ease-in-out infinite;
+  transition:opacity .3s;
+}
+#obs-dot.hidden{opacity:0}
+@keyframes pulse{0%,100%{opacity:.4;transform:scale(1)}50%{opacity:.9;transform:scale(1.3)}}
+
+/* ─── Gear button ───────────────────────────────────── */
+#gear{
+  position:fixed;top:10px;right:10px;z-index:900;
+  background:rgba(20,15,35,.7);color:rgba(190,160,255,.5);
+  border:1px solid rgba(140,90,255,.2);border-radius:9px;
+  width:33px;height:33px;font-size:15px;cursor:pointer;
+  opacity:.12;transition:opacity .2s;
+  display:flex;align-items:center;justify-content:center;pointer-events:all;
+}
+#gear:hover{opacity:.95}
+
+/* ─── Panel ─────────────────────────────────────────── */
+#panel{
+  position:fixed;top:0;right:0;width:320px;height:100vh;
+  background:var(--panel);overflow-y:auto;
+  z-index:950;transform:translateX(100%);transition:transform .25s ease;
+  padding:12px 10px 20px;font-family:'Inter',sans-serif;font-size:13px;
+  box-shadow:-6px 0 30px rgba(0,0,0,.7);pointer-events:all;
+  scrollbar-width:thin;scrollbar-color:rgba(140,90,255,.2) transparent;
+}
+#panel::-webkit-scrollbar{width:4px}
+#panel::-webkit-scrollbar-thumb{background:rgba(140,90,255,.2);border-radius:2px}
+#panel.open{transform:translateX(0)}
+
+/* ─── Panel header ──────────────────────────────────── */
+.ph{display:flex;align-items:center;gap:9px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,.07)}
+.ph-ico{font-size:22px}
+.ph-meta{flex:1}
+.ph-title{font-size:13.5px;font-weight:700;color:#ece6ff}
+.ph-sub{font-size:9px;color:rgba(255,255,255,.22);margin-top:1px}
+.ph-x{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:7px;color:rgba(255,255,255,.4);width:25px;height:25px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:11px;flex-shrink:0}
+.ph-x:hover{background:rgba(220,60,60,.2);color:#f88}
+
+/* ─── OBS URL box (always visible at top) ───────────── */
+#obs-url-wrap{
+  background:rgba(140,90,255,.08);border:1px solid rgba(140,90,255,.22);
+  border-radius:10px;padding:10px 11px;margin-bottom:10px;
+}
+.obs-url-label{font-size:10px;font-weight:600;color:rgba(180,150,255,.7);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px}
+.obs-url-steps{font-size:9.5px;color:rgba(255,255,255,.32);line-height:1.6;margin-bottom:7px}
+.obs-url-steps strong{color:rgba(255,255,255,.55)}
+#obs-url-text{
+  font-family:monospace;font-size:9px;color:#b39ddb;
+  word-break:break-all;line-height:1.4;
+  background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.07);
+  border-radius:5px;padding:6px 8px;margin-bottom:6px;
+  max-height:55px;overflow-y:auto;cursor:pointer;
+  user-select:all;transition:background .15s;
+}
+#obs-url-text:hover{background:rgba(140,90,255,.1)}
+#obs-url-text.copied{background:rgba(50,150,80,.15);border-color:rgba(80,200,100,.25)}
+.obs-url-hint{font-size:9px;color:rgba(255,255,255,.2);text-align:center}
+
+/* ─── Status badges ─────────────────────────────────── */
+.conn-bar{display:flex;gap:5px;margin-bottom:8px}
+.conn-badge{flex:1;padding:5px 7px;border-radius:7px;border:1px solid;font-size:10.5px;font-weight:600;display:flex;align-items:center;gap:5px;background:rgba(0,0,0,.2)}
+.conn-badge.tw{border-color:rgba(145,71,255,.25);color:rgba(180,140,255,.7)}
+.conn-badge.yt{border-color:rgba(200,40,40,.2);color:rgba(255,140,140,.7)}
+.conn-badge.ok{border-color:rgba(80,200,100,.3);color:#6dcc7e}
+.conn-badge .dot2{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
+
+/* ─── Cards ─────────────────────────────────────────── */
+.card{background:var(--card);border:1px solid rgba(255,255,255,.07);border-radius:11px;margin-bottom:7px;overflow:hidden;transition:border-color .2s}
+.card[open]{border-color:rgba(140,90,255,.22)}
+.card>summary{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;list-style:none;user-select:none;transition:background .15s}
+.card>summary::-webkit-details-marker{display:none}
+.card>summary:hover{background:rgba(255,255,255,.03)}
+.cico{font-size:17px;flex-shrink:0}
+.clbl{font-size:12.5px;font-weight:600;color:rgba(255,255,255,.72);flex:1}
+.carr{font-size:9px;color:rgba(255,255,255,.2);transition:transform .2s}
+.card[open]>summary .carr{transform:rotate(180deg)}
+.cb{padding:9px 12px 13px}
+
+/* ─── Sub-details ───────────────────────────────────── */
+.sub{background:rgba(0,0,0,.15);border:1px solid rgba(255,255,255,.05);border-radius:8px;margin-bottom:6px;overflow:hidden}
+.sub>summary{display:flex;align-items:center;gap:6px;padding:7px 10px;cursor:pointer;list-style:none;user-select:none;font-size:11.5px;font-weight:600;color:rgba(255,255,255,.42);transition:background .15s}
+.sub>summary::-webkit-details-marker{display:none}
+.sub>summary::before{content:'▶';font-size:7px;color:rgba(255,255,255,.2);transition:transform .2s;flex-shrink:0}
+.sub[open]>summary::before{transform:rotate(90deg)}
+.sub>summary:hover{background:rgba(255,255,255,.04)}
+.sbb{padding:8px 10px 10px}
+.snote{font-size:10px;color:rgba(255,255,255,.3);line-height:1.55;margin-bottom:7px}
+.snote a{color:#b39ddb;text-decoration:none}.snote a:hover{text-decoration:underline}
+.snote code{font-size:9px;color:#c9a0f0;word-break:break-all;display:block;margin:3px 0;padding:3px 6px;background:rgba(0,0,0,.3);border-radius:4px}
+
+/* ─── Form elements ─────────────────────────────────── */
+.f{margin-bottom:8px}
+.flabel{display:flex;align-items:center;gap:5px;margin-bottom:3px}
+.flabel label,.f>label{font-size:10.5px;color:rgba(255,255,255,.42);flex:1;cursor:default}
+.f>label{display:block;margin-bottom:3px}
+.f input[type=text]{width:100%;padding:6px 9px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.09);border-radius:7px;color:#ece6ff;font-size:12.5px;outline:none;transition:border-color .15s}
+.f input[type=text]:focus{border-color:rgba(140,90,255,.45);background:rgba(140,90,255,.06)}
+.f select{width:100%;padding:6px 28px 6px 9px;background:#14112a;border:1px solid rgba(255,255,255,.1);border-radius:7px;color:#ece6ff;font-size:12.5px;outline:none;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='rgba(180%2C150%2C255%2C.45)'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 9px center;cursor:pointer}
+.f select option{background:#14112a;color:#ece6ff}
+.f input[type=range]{width:100%;accent-color:#7c4dff;margin-top:3px;cursor:pointer}
+.rv{font-size:10px;color:rgba(255,255,255,.26);float:right}
+.row{display:flex;gap:6px}.row .f{flex:1}
+.f input[type=number]{width:100%;padding:6px 9px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.09);border-radius:7px;color:#ece6ff;font-size:12.5px;outline:none;-moz-appearance:textfield;text-align:center}
+.f input[type=number]::-webkit-outer-spin-button,.f input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+
+/* ─── Info bubbles ──────────────────────────────────── */
+.ibtn{width:15px;height:15px;border-radius:50%;background:rgba(140,90,255,.12);border:1px solid rgba(140,90,255,.2);color:rgba(180,150,255,.5);font-size:8.5px;font-weight:700;cursor:pointer;padding:0;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.ibtn:hover{background:rgba(140,90,255,.28);color:#c9a0f0}
+.ibox{font-size:10px;color:rgba(255,255,255,.37);background:rgba(140,90,255,.05);border-left:2px solid rgba(140,90,255,.2);border-radius:0 5px 5px 0;padding:6px 9px;margin-top:-3px;margin-bottom:7px;line-height:1.55;display:none}
+.ibox.on{display:block}
+.ibox a{color:#b39ddb;text-decoration:none}.ibox a:hover{text-decoration:underline}
+.ibox code{font-size:9px;display:block;padding:2px 5px;background:rgba(0,0,0,.25);border-radius:3px;margin:3px 0}
+
+/* ─── Status row ────────────────────────────────────── */
+.status-row{font-size:10.5px;color:rgba(255,255,255,.28);display:flex;align-items:center;gap:5px;margin:5px 0}
+.dot{width:6px;height:6px;border-radius:50%;background:#1e1e28;flex-shrink:0;transition:background .3s}
+.dot.ok{background:#4caf50}.dot.busy{background:#ff9800}.dot.err{background:#f44336}
+
+/* ─── Buttons ───────────────────────────────────────── */
+.btn{width:100%;padding:7px 11px;border-radius:8px;border:none;cursor:pointer;font-size:12.5px;font-weight:600;margin-top:5px;transition:filter .15s,transform .1s;letter-spacing:.1px}
+.btn:hover{filter:brightness(1.13)}.btn:active{transform:scale(.98)}
+.btn-p{background:linear-gradient(135deg,#5228b8,#7c4dff);color:#fff}
+.btn-tw{background:linear-gradient(135deg,#5a1fc4,#9147ff);color:#fff}
+.btn-g{background:linear-gradient(135deg,#1a50b0,#4285f4);color:#fff}
+.btn-s{background:rgba(255,255,255,.07);color:rgba(255,255,255,.65);border:1px solid rgba(255,255,255,.1)}
+.btn-d{background:rgba(160,30,30,.15);color:#e07070;border:1px solid rgba(160,30,30,.22)}
+.btn-app{background:rgba(140,90,255,.1);color:rgba(190,160,255,.8);border:1px solid rgba(140,90,255,.2)}
+.tok-ok{font-size:10px;color:#7bc97e;margin:4px 0;display:none}
+
+/* ─── Toggles ───────────────────────────────────────── */
+.trow{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
+.tlbl{font-size:11px;color:rgba(255,255,255,.45)}
+.tog{position:relative;display:inline-block;width:32px;height:17px}
+.tog input{opacity:0;width:0;height:0}
+.sldr{position:absolute;inset:0;background:rgba(255,255,255,.1);border-radius:17px;cursor:pointer;transition:.2s}
+.sldr::before{content:'';position:absolute;width:11px;height:11px;left:3px;top:3px;background:rgba(255,255,255,.6);border-radius:50%;transition:.2s}
+.tog input:checked+.sldr{background:#6929c4}
+.tog input:checked+.sldr::before{transform:translateX(15px);background:#fff}
+
+/* ─── Demo buttons ──────────────────────────────────── */
+.demo-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:6px}
+.dbtn{padding:8px;border-radius:8px;border:none;cursor:pointer;font-size:11.5px;font-weight:600;transition:filter .15s}
+.dbtn:hover{filter:brightness(1.15)}
+.dbtn-tw{background:rgba(145,71,255,.14);color:rgba(200,170,255,.85);border:1px solid rgba(145,71,255,.2)}
+.dbtn-tw.on{background:rgba(145,71,255,.3);border-color:rgba(145,71,255,.5)}
+.dbtn-yt{background:rgba(200,40,40,.12);color:rgba(255,160,160,.85);border:1px solid rgba(200,40,40,.18)}
+.dbtn-yt.on{background:rgba(200,40,40,.28);border-color:rgba(200,40,40,.45)}
+
+/* ─── Keyboard shortcuts hint ───────────────────────── */
+.shortcuts{font-size:9.5px;color:rgba(255,255,255,.18);margin-top:8px;line-height:1.7;text-align:center}
+kbd{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:3px;padding:1px 4px;font-size:9px;font-family:monospace}
+</style>
+</head>
+<body>
+
+<style id="chat-outline-style"></style>
+<!-- OBS activity indicator — proves the overlay is loaded -->
+<div id="obs-dot" title="Overlay active"></div>
+<button id="gear" title="Settings (S)">⚙</button>
+
+<div id="panel">
+  <div class="ph">
+    <div class="ph-ico">💬</div>
+    <div class="ph-meta">
+      <div class="ph-title">Chat Overlay</div>
+      <div class="ph-sub" id="ph-sub">settings saved · press S to close</div>
+    </div>
+    <button class="ph-x" id="closepanel">✕</button>
+  </div>
+
+  <!-- ── OBS URL — always visible ── -->
+  <div id="obs-url-wrap">
+    <div class="obs-url-label">📡 Your OBS URL</div>
+    <div class="obs-url-steps">
+      Updates live as you change settings.<br>
+      <strong>In OBS:</strong> Add Browser Source → <strong>URL field</strong> (not Local File) → paste ↓
+    </div>
+    <div id="obs-url-text" title="Click to copy" onclick="copyOBSUrl()">loading…</div>
+    <div class="obs-url-hint" id="copy-hint">click the URL above to copy it</div>
+  </div>
+
+  <!-- ── Connection status ── -->
+  <div class="conn-bar">
+    <div class="conn-badge tw" id="tw-badge"><span class="dot2"></span><span id="tw-badge-txt">Twitch</span></div>
+    <div class="conn-badge yt" id="yt-badge"><span class="dot2"></span><span id="yt-badge-txt">YouTube</span></div>
+  </div>
+
+  <!-- ── Preview ── -->
+  <details class="card" open>
+    <summary><span class="cico">🖥️</span><span class="clbl">Preview & Window</span><span class="carr">▾</span></summary>
+    <div class="cb">
+      <div class="trow">
+        <div>
+          <div class="tlbl">Dark preview background</div>
+          <div style="font-size:9.5px;color:rgba(255,255,255,.22);margin-top:2px">Local only — OBS always gets transparent</div>
+        </div>
+        <label class="tog"><input type="checkbox" id="prevbg"><span class="sldr"></span></label>
+      </div>
+      <div class="trow" style="margin-bottom:4px">
+        <div>
+          <div class="tlbl">Show overlay dot in OBS</div>
+          <div style="font-size:9.5px;color:rgba(255,255,255,.22);margin-top:2px">Purple pulse confirms overlay is loaded</div>
+        </div>
+        <label class="tog"><input type="checkbox" id="showdot" checked><span class="sldr"></span></label>
+      </div>
+      <button class="btn btn-app" id="appwin" style="margin-top:8px">⧉ Open as App Window</button>
+    </div>
+  </details>
+
+  <!-- ── Twitch ── -->
+  <details class="card" open>
+    <summary><span class="cico">💜</span><span class="clbl">Twitch</span><span class="carr">▾</span></summary>
+    <div class="cb">
+      <div class="f">
+        <div class="flabel">
+          <label>Channel Name</label>
+          <button class="ibtn" onclick="ti(this)">?</button>
+        </div>
+        <div class="ibox">Your Twitch username, e.g. <code>ninja</code>. Determines which chat room to join.</div>
+        <input type="text" id="tc" placeholder="your_channel">
+      </div>
+
+      <details class="sub">
+        <summary>🔒 Authorize with Twitch <span style="font-size:9.5px;color:rgba(255,255,255,.18);font-weight:400;margin-left:3px">recommended</span></summary>
+        <div class="sbb">
+          <div class="snote">
+            1. Create a free app at <a href="https://dev.twitch.tv/console/apps/create" target="_blank" rel="noopener noreferrer">dev.twitch.tv →</a><br>
+            2. Set its OAuth Redirect URL to:<code id="tw-redir"></code>
+            3. Paste your Client ID below and click Authorize. Channel name + ID fill in automatically.
+          </div>
+          <div class="f"><label>Twitch App Client ID</label><input type="text" id="tcid" placeholder="abc123xyz..."></div>
+          <div class="tok-ok" id="tw-tok-ok">✅ Authorized</div>
+          <button class="btn btn-tw" id="tw-auth">🔒 Authorize with Twitch</button>
+          <button class="btn btn-s" id="tw-revoke" style="display:none;margin-top:4px">Disconnect</button>
+        </div>
+      </details>
+
+      <details class="sub">
+        <summary>🔑 Manual Token</summary>
+        <div class="sbb">
+          <div class="snote">Prefer the built-in Twitch authorization above. If you already have a token with <code>chat:read</code>, you can paste it here. Channel ID is optional and enables channel-specific badges.</div>
+          <div class="f"><label>OAuth Token</label><input type="password" id="ttoken" autocomplete="off" spellcheck="false" placeholder="oauth:..."></div>
+          <div class="f"><label>Channel ID</label><input type="text" id="tid" placeholder="123456789"></div>
+        </div>
+      </details>
+
+      <div class="status-row"><span class="dot" id="tdot"></span><span id="tstat">Not connected</span></div>
+      <button class="btn btn-p" id="tconn">Connect Twitch</button>
+    </div>
+  </details>
+
+  <!-- ── YouTube ── -->
+  <details class="card" open>
+    <summary><span class="cico">🔴</span><span class="clbl">YouTube</span><span class="carr">▾</span></summary>
+    <div class="cb">
+      <div class="f">
+        <div class="flabel">
+          <label>Video ID or URL</label>
+          <button class="ibtn" onclick="ti(this)">?</button>
+        </div>
+        <div class="ibox">Paste a YouTube URL or the 11-character video ID. Must have an active live chat. Recently-ended stream URLs also work — YouTube keeps the chat replay accessible for a while.</div>
+        <input type="text" id="yv" placeholder="dQw4w9WgXcQ or full URL">
+      </div>
+
+              <details class="sub">
+        <summary>🔑 API Key <span style="font-size:9.5px;color:rgba(100,220,130,.5);font-weight:400;margin-left:3px">recommended for local files</span></summary>
+        <div class="sbb">
+          <div class="snote">
+            Simplest option — works with local HTML files, no redirect URI needed.<br><br>
+            1. Go to <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer">Google Cloud Console → Credentials →</a> Create Credentials → <strong>API Key</strong><br>
+            2. Enable <strong>YouTube Data API v3</strong> in your project<br>
+            3. Paste the key below
+          </div>
+          <div class="f"><label>API Key</label><input type="password" id="yk" autocomplete="off" spellcheck="false" placeholder="AIzaSy..."></div>
+        </div>
+      </details>
+
+      <details class="sub">
+        <summary>🔒 Sign in with Google <span style="font-size:9.5px;color:rgba(255,255,255,.18);font-weight:400;margin-left:3px">requires localhost</span></summary>
+        <div class="sbb">
+          <div class="snote">
+            ⚠️ <strong>Google blocks <code>file://</code> URLs as redirect URIs.</strong> To use OAuth you must serve this file over localhost:<br><br>
+            Open a terminal in this file's folder and run:<br>
+            <code>python -m http.server 8080</code>
+            Then open <strong>http://localhost:8080/stream_chat_overlay.html</strong> in your browser and use that as both your URL and redirect URI below.<br><br>
+            1. Create an OAuth 2.0 Client ID at <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer">Google Cloud Console →</a> (Web application type)<br>
+            2. Add <strong>http://localhost:8080/stream_chat_overlay.html</strong> as an Authorized Redirect URI<br>
+            3. Enable <strong>YouTube Data API v3</strong> in your project
+          </div>
+          <div class="snote" style="color:rgba(255,200,100,.5)">Your redirect URI will be: <code id="yt-redir"></code></div>
+          <div class="f"><label>Google OAuth Client ID</label><input type="text" id="gcid" placeholder="123.apps.googleusercontent.com"></div>
+          <div class="tok-ok" id="yt-tok-ok">✅ Signed in</div>
+          <button class="btn btn-g" id="yt-auth">🔒 Sign in with Google</button>
+          <button class="btn btn-s" id="yt-revoke" style="display:none;margin-top:4px">Disconnect</button>
+        </div>
+      </details>
+
+      <div class="status-row"><span class="dot" id="ydot"></span><span id="ystat">Not connected</span></div>
+      <button class="btn btn-p" id="yconn">Connect YouTube</button>
+    </div>
+  </details>
+
+  <!-- ── Appearance ── -->
+  <details class="card">
+    <summary><span class="cico">🎨</span><span class="clbl">Appearance</span><span class="carr">▾</span></summary>
+    <div class="cb">
+      <div class="f"><label>Font</label>
+        <select id="ff">
+          <option value="'Inter',sans-serif">Inter</option>
+          <option value="'Roboto',sans-serif">Roboto</option>
+          <option value="'Open Sans',sans-serif">Open Sans</option>
+          <option value="'Nunito',sans-serif">Nunito</option>
+          <option value="'Poppins',sans-serif">Poppins</option>
+          <option value="'Oswald',sans-serif">Oswald</option>
+          <option value="Arial,sans-serif">Arial</option>
+          <option value="'Segoe UI',sans-serif">Segoe UI</option>
+          <option value="'Courier New',monospace">Courier New</option>
+          <option value="Georgia,serif">Georgia</option>
+        </select>
+      </div>
+      <div class="f"><label>Font Size <span class="rv" id="fsv">14px</span></label><input type="range" id="fs" min="10" max="30" value="14"></div>
+      <div class="f"><label>Message Opacity <span class="rv" id="opv">100%</span></label><input type="range" id="op" min="0" max="100" value="100"></div>
+      <div class="f"><label>Background Opacity <span class="rv" id="bav">15%</span></label><input type="range" id="ba" min="0" max="100" value="15"></div>
+      <div class="f"><label>Text Shadow</label>
+        <select id="ts">
+          <option value="1px 1px 3px rgba(0,0,0,.9)">Soft</option>
+          <option value="2px 2px 0 rgba(0,0,0,1)">Hard</option>
+          <option value="0 0 8px rgba(0,0,0,1)">Glow</option>
+          <option value="none">None</option>
+        </select>
+      </div>
+      <div class="row">
+        <div class="f"><label>Corners <span class="rv" id="brv">4px</span></label><input type="range" id="br" min="0" max="24" value="4"></div>
+        <div class="f"><label>Gap <span class="rv" id="gpv">4px</span></label><input type="range" id="gp" min="0" max="20" value="4"></div>
+      </div>
+      <div class="f"><label>Chat Width <span class="rv" id="cwv">Full</span></label><input type="range" id="cw" min="160" max="1920" value="1920"></div>
+      <div class="f"><label>Chat Anchor</label>
+        <select id="cp">
+          <option value="left">Left</option>
+          <option value="center">Center</option>
+          <option value="right">Right</option>
+        </select>
+      </div>
+      <div class="f"><label>Max Messages <span class="rv" id="mmv">30</span></label><input type="range" id="mm" min="5" max="100" value="30"></div>
+      <div class="f"><label>Fade Out After <span class="rv" id="ltv">Never</span></label><input type="range" id="lt" min="0" max="120" value="0"></div>
+      <div style="border-top:1px solid rgba(255,255,255,.05);padding-top:8px;margin-top:4px">
+        <div class="trow"><span class="tlbl">Show Platform Tag (T / Y)</span><label class="tog"><input type="checkbox" id="ptag" checked><span class="sldr"></span></label></div>
+        <div class="trow"><span class="tlbl">Twitch Username Colors</span><label class="tog"><input type="checkbox" id="ucol" checked><span class="sldr"></span></label></div>
+        <div class="trow"><span class="tlbl">Render Twitch Emotes</span><label class="tog"><input type="checkbox" id="emotes" checked><span class="sldr"></span></label></div>
+        <div class="trow"><span class="tlbl">BTTV Global Emotes</span><label class="tog"><input type="checkbox" id="bttvglobals" checked><span class="sldr"></span></label></div>
+        <div class="trow"><span class="tlbl">Bold message text</span><label class="tog"><input type="checkbox" id="boldtext"><span class="sldr"></span></label></div>
+        <div class="trow" style="margin:0"><span class="tlbl">Truncate long usernames</span><label class="tog"><input type="checkbox" id="truncnames"><span class="sldr"></span></label></div>
+      </div>
+      <div class="f" style="margin-top:10px"><label>Text Outline <span class="rv" id="outlinev">None</span></label>
+        <input type="range" id="outline" min="0" max="4" step="1" value="0">
+      </div>
+      <div class="f"><label>Username Max Width <span class="rv" id="nwv">Unlimited</span></label>
+        <input type="range" id="nw" min="40" max="300" value="300">
+      </div>
+    </div>
+  </details>
+
+  <!-- ── OBS source dims ── -->
+  <details class="card">
+    <summary><span class="cico">📐</span><span class="clbl">OBS Source Size</span><span class="carr">▾</span></summary>
+    <div class="cb">
+      <div class="snote" style="margin-bottom:8px">Set these to match your OBS browser source dimensions. They're saved in your URL as a reminder when setting up OBS.</div>
+      <div class="row">
+        <div class="f"><label>Width (px)</label><input type="number" id="obsW" placeholder="1920" min="100" max="7680"></div>
+        <div class="f"><label>Height (px)</label><input type="number" id="obsH" placeholder="1080" min="100" max="4320"></div>
+      </div>
+    </div>
+  </details>
+
+  <!-- ── Blacklist ── -->
+  <details class="card">
+    <summary><span class="cico">🚫</span><span class="clbl">Name Blacklist</span><span class="carr">▾</span></summary>
+    <div class="cb">
+      <div class="trow">
+        <div>
+          <span class="tlbl">Blacklist active</span>
+          <div style="font-size:9.5px;color:rgba(255,255,255,.22);margin-top:2px">Toggle off to temporarily allow all names</div>
+        </div>
+        <label class="tog"><input type="checkbox" id="bl-on" checked><span class="sldr"></span></label>
+      </div>
+      <div class="f" style="margin-top:4px">
+        <div class="flabel">
+          <label>Blocked names (one per line)</label>
+          <button class="ibtn" onclick="ti(this)">?</button>
+        </div>
+        <div class="ibox">Messages from these usernames will be hidden from the overlay. Case-insensitive. Useful for bots (Nightbot, StreamElements, etc.). Toggle the switch above to temporarily let everything through without losing your list.</div>
+        <textarea id="bl-names" rows="4" style="width:100%;padding:6px 9px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.09);border-radius:7px;color:#ece6ff;font-size:12px;outline:none;resize:vertical;font-family:'Inter',sans-serif;line-height:1.5" placeholder="Nightbot&#10;StreamElements&#10;botname"></textarea>
+      </div>
+      <div style="font-size:9.5px;color:rgba(255,255,255,.22);margin-top:2px" id="bl-count"></div>
+    </div>
+  </details>
+
+  <!-- ── Testing ── -->
+  <details class="card" open>
+    <summary><span class="cico">🧪</span><span class="clbl">Testing</span><span class="carr">▾</span></summary>
+    <div class="cb">
+      <div class="demo-grid">
+        <button class="dbtn dbtn-tw" id="tw-demo">💜 Twitch Demo</button>
+        <button class="dbtn dbtn-yt" id="yt-demo">🔴 YouTube Demo</button>
+      </div>
+      <div style="display:flex;gap:5px">
+        <button class="btn btn-s" id="testbtn" style="flex:1">Add Test Messages</button>
+        <button class="btn btn-d" id="clearbtn" style="flex:0 0 auto;width:auto;padding:6px 10px;margin-top:5px">Clear</button>
+      </div>
+      <div style="border-top:1px solid rgba(255,255,255,.05);padding-top:8px;margin-top:8px">
+        <div class="trow" style="margin:0">
+          <div>
+            <span class="tlbl">Keyboard Shortcuts</span>
+            <div style="font-size:9.5px;color:rgba(255,255,255,.22);margin-top:2px" id="shortcuts-hint"></div>
+          </div>
+          <label class="tog"><input type="checkbox" id="shortcuts-tog"><span class="sldr"></span></label>
+        </div>
+      </div>
+    </div>
+  </details>
+
+  <div class="shortcuts" id="shortcuts-legend">
+    <kbd>S</kbd> toggle panel &nbsp;·&nbsp; <kbd>Esc</kbd> close panel &nbsp;·&nbsp;
+    <kbd>T</kbd> Twitch demo &nbsp;·&nbsp; <kbd>Y</kbd> YT demo &nbsp;·&nbsp; <kbd>C</kbd> clear chat
+  </div>
+</div>
+
+<div id="chat" class="pos-left"></div>
+
+<script>
+'use strict';
+
+// ── SVG badges ────────────────────────────────────────
+const BP={
+  crown:'<path fill="white" d="M3.5 13.5h11l-1.8-5-3.7 2.3-1-3.3-1 3.3L3.3 8.5z"/><rect fill="white" x="3.5" y="14" width="11" height="1.5" rx=".75"/>',
+  wrench:'<path fill="white" d="M13.2 3.8a3 3 0 00-2.9 3.9L5.1 12.9a1.1 1.1 0 001.6 1.6l5.2-5.2a3 3 0 004-4A3 3 0 0013.2 3.8zm0 4.4a1.4 1.4 0 110-2.8 1.4 1.4 0 010 2.8z"/>',
+  star:'<path fill="white" d="M9 4.2l1.5 3 3.3.5-2.4 2.3.6 3.3L9 11.7l-3 1.6.6-3.3L4.2 7.7l3.3-.5z"/>',
+  shield:'<path fill="white" d="M9 3.5L4.5 5.5v4C4.5 12.4 6.5 14.8 9 15.7c2.5-.9 4.5-3.3 4.5-6.2v-4z"/>'
+};
+function svg(sh,bg){return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18"><circle cx="9" cy="9" r="9" fill="${bg}"/>${BP[sh]}</svg>`);}
+const YTB={owner:svg('crown','#c8a000'),mod:svg('wrench','#505050'),member:svg('star','#c8a000'),new:svg('shield','#6929c4')};
+
+// ── Settings ──────────────────────────────────────────
+const DEF={
+  tc:'',tid:'',tcid:'',ttoken:'',gcid:'',gtoken:'',yk:'',yv:'',
+  ff:"'Inter',sans-serif",fs:14,op:100,ba:15,
+  ts:'1px 1px 3px rgba(0,0,0,.9)',br:4,gp:4,cw:1920,cp:'left',
+  mm:30,lt:0,ptag:1,ucol:1,emotes:1,bttvglobals:1,showdot:1,obsW:'',obsH:'',
+  boldtext:0,truncnames:0,nw:160,outline:0,shortcuts:1,blon:1,blnames:''
+};
+const PRIV=['ttoken','gtoken']; // excluded from URL hash
+const S={...DEF};
+let hashUpdateTimer=null;
+const NAME_DEFAULT_W=160,NAME_UNLIMITED_W=300;
+
+function $i(id){return document.getElementById(id);}
+function nameLimitLabel(){return S.truncnames?S.nw+'px':'Unlimited';}
+function setNameLimit(on){
+  S.truncnames=on?1:0;
+  if(S.truncnames&&(!S.nw||S.nw>=NAME_UNLIMITED_W))S.nw=NAME_DEFAULT_W;
+  $i('nw').value=S.nw;
+  $i('nwv').textContent=nameLimitLabel();
+  applyCSS();save();
+}
+
+// load: URL hash takes priority over localStorage
+function load(){
+  try{const r=localStorage.getItem('schat5');if(r)Object.assign(S,JSON.parse(r));}catch{}
+  const h=location.hash.slice(1);
+  if(h){try{
+    const p=new URLSearchParams(h);
+    for(const k of Object.keys(DEF)){
+      if(PRIV.includes(k))continue;
+      if(p.has(k))S[k]=typeof DEF[k]==='number'?+p.get(k):p.get(k);
+    }
+  }catch{}}
+  if(S.truncnames&&(!S.nw||S.nw>=NAME_UNLIMITED_W))S.nw=NAME_DEFAULT_W;
+}
+
+// save to localStorage + live-update URL hash (debounced)
+function save(){
+  try{localStorage.setItem('schat5',JSON.stringify(S));}catch{}
+  clearTimeout(hashUpdateTimer);
+  hashUpdateTimer=setTimeout(updateHash,300);
+}
+
+function buildHashParams(){
+  const p=new URLSearchParams();
+  for(const[k,v]of Object.entries(S)){if(!PRIV.includes(k)&&v!==''&&v!==DEF[k]||['tc','yv','yk'].includes(k))p.set(k,v);}
+  // always include connection params
+  for(const k of['tc','yv','yk','tcid','gcid','obsW','obsH']){if(S[k])p.set(k,S[k]);}
+  return p.toString();
+}
+
+function updateHash(){
+  const params=buildHashParams();
+  const newHash=params?'#'+params:'';
+  history.replaceState(null,'',location.pathname+newHash);
+  renderOBSUrl();
+}
+
+function renderOBSUrl(){
+  const url=location.href.split('#')[0]+location.hash;
+  const el=$i('obs-url-text');
+  el.textContent=url;
+}
+
+function copyOBSUrl(){
+  const url=$i('obs-url-text').textContent;
+  navigator.clipboard.writeText(url).then(()=>{
+    const el=$i('obs-url-text');
+    el.classList.add('copied');
+    $i('copy-hint').textContent='✅ Copied! Paste this into OBS Browser Source → URL field';
+    setTimeout(()=>{el.classList.remove('copied');$i('copy-hint').textContent='click the URL above to copy it';},3000);
+  }).catch(()=>{
+    // fallback select
+    const range=document.createRange();range.selectNode($i('obs-url-text'));
+    window.getSelection().removeAllRanges();window.getSelection().addRange(range);
+    $i('copy-hint').textContent='Ctrl+C to copy';
+  });
+}
+
+// ── Apply CSS vars ────────────────────────────────────
+// ── Local helper server settings ───────────────────────
+const SERVER_MODE=['localhost','127.0.0.1'].includes(location.hostname);
+function applyServerConfig(cfg={},reconnect=false){
+  let ytChanged=false,twChanged=false;
+  if('youtubeUrl'in cfg&&cfg.youtubeUrl!==S.yv){S.yv=cfg.youtubeUrl||'';const el=$i('yv');if(el)el.value=S.yv;ytChanged=true;}
+  if('youtubeApiKey'in cfg&&cfg.youtubeApiKey!==S.yk){S.yk=cfg.youtubeApiKey||'';const el=$i('yk');if(el)el.value=S.yk;ytChanged=true;}
+  if('twitchChannel'in cfg&&cfg.twitchChannel!==S.tc){S.tc=cfg.twitchChannel||'';const el=$i('tc');if(el)el.value=S.tc;twChanged=true;}
+  if('twitchChannelId'in cfg&&cfg.twitchChannelId!==S.tid){S.tid=cfg.twitchChannelId||'';const el=$i('tid');if(el)el.value=S.tid;twChanged=true;}
+  renderOBSUrl();
+  if(reconnect&&twChanged&&S.tc)connectTwitch(S.tc,S.tid||null,S.ttoken||null);
+  if(reconnect&&ytChanged){
+    clearTimeout(yTimer);yTimer=null;yChatId=null;yPT=null;yFirst=true;
+    if(!SERVER_MODE&&S.yv&&(S.yk||S.gtoken))startYT();
+    else yStat('Waiting for YouTube URL/API key','');
+  }
+  return ytChanged||twChanged;
+}
+async function loadServerConfig(){
+  if(!SERVER_MODE)return false;
+  try{
+    const r=await fetch('/api/config',{cache:'no-store'});
+    if(!r.ok)return false;
+    return applyServerConfig(await r.json(),false);
+  }catch{return false;}
+}
+function watchServerConfig(){
+  if(!SERVER_MODE||!window.EventSource)return;
+  const ev=new EventSource('/api/events');
+  ev.addEventListener('config',e=>{try{applyServerConfig(JSON.parse(e.data),true);}catch{}});
+}
+function watchServerChat(){
+  if(!SERVER_MODE||!window.EventSource)return;
+  const ev=new EventSource('/api/chat');
+  ev.addEventListener('message',e=>{
+    try{
+      const m=JSON.parse(e.data);
+      if(m.platform==='youtube')addMsg('youtube',m.badges||[],m.username||'YouTube Viewer',m.color||null,m.parts||'');
+    }catch{}
+  });
+  ev.addEventListener('status',e=>{
+    try{
+      const s=JSON.parse(e.data);
+      if(s.platform==='youtube')yStat(s.text,s.ok?'ok':'busy');
+    }catch{}
+  });
+}
+
+function applyCSS(){
+  const r=document.documentElement,a=S.ba/100;
+  r.style.setProperty('--ff',S.ff);r.style.setProperty('--fs',S.fs+'px');
+  r.style.setProperty('--op',S.op/100);
+  r.style.setProperty('--twbg',`rgba(160,120,210,${a})`);
+  r.style.setProperty('--ytbg',`rgba(200,90,90,${a})`);
+  r.style.setProperty('--sh',S.ts);r.style.setProperty('--rad',S.br+'px');
+  r.style.setProperty('--gap',S.gp+'px');
+  r.style.setProperty('--cw',S.cw>=1920?'100%':S.cw+'px');
+  r.style.setProperty('--tfw',S.boldtext?'700':'400');
+  r.style.setProperty('--nw',S.truncnames?S.nw+'px':'none');
+  // outline = paint-order stroke trick
+  const ow=S.outline;
+  const outlineCSS=ow>0?`-webkit-text-stroke:${ow}px rgba(0,0,0,${Math.min(.95,ow*.22+.4)})`:'';
+  document.getElementById('chat-outline-style').textContent=ow>0?`.msg .uname,.msg .text{-webkit-text-stroke:${ow}px rgba(0,0,0,${Math.min(.95,ow*.22+.4)})}`:'' ;
+  $i('chat').className='pos-'+S.cp;
+  $i('obs-dot').classList.toggle('hidden',!S.showdot);
+}
+
+// ── Populate form from S ──────────────────────────────
+function populateUI(){
+  const base=location.href.split('#')[0];
+  $i('tw-redir').textContent=base;$i('yt-redir').textContent=base;
+  ['tc','tid','tcid','ttoken','gcid','yk','yv'].forEach(k=>$i(k).value=S[k]);
+  $i('ff').value=S.ff;$i('ts').value=S.ts;$i('cp').value=S.cp;
+  if(S.obsW)$i('obsW').value=S.obsW;if(S.obsH)$i('obsH').value=S.obsH;
+  [['fs','fsv','px'],['op','opv','%'],['ba','bav','%'],['br','brv','px'],
+   ['gp','gpv','px'],['mm','mmv',''],['lt','ltv','s'],['cw','cwv','px']].forEach(([id,vid,u])=>{
+    $i(id).value=S[id];
+    $i(vid).textContent=id==='lt'?(S[id]?S[id]+'s':'Never'):id==='cw'?(S[id]>=1920?'Full':S[id]+'px'):S[id]+u;
+  });
+  ['ptag','ucol','emotes','bttvglobals','showdot','boldtext','truncnames'].forEach(k=>$i(k).checked=!!S[k]);
+  $i('bl-on').checked=!!S.blon;
+  $i('bl-names').value=S.blnames||'';
+  $i('outline').value=S.outline;$i('outlinev').textContent=S.outline>0?S.outline+'px':'None';
+  $i('nw').value=S.nw;$i('nwv').textContent=nameLimitLabel();
+  updateBLCount();
+  // preview bg (stored locally, never in URL)
+  try{$i('prevbg').checked=localStorage.getItem('schat5_prev')==='1';}catch{}
+  if($i('prevbg').checked)document.body.classList.add('preview-bg');
+  if(S.ttoken){$i('tw-tok-ok').style.display='block';$i('tw-revoke').style.display='block';$i('tw-auth').textContent='🔄 Re-authorize';}
+  if(S.gtoken){$i('yt-tok-ok').style.display='block';$i('yt-revoke').style.display='block';$i('yt-auth').textContent='🔄 Re-authorize';}
+  renderOBSUrl();
+}
+
+// ── Info bubbles ──────────────────────────────────────
+function ti(btn){const box=btn.closest('.flabel').nextElementSibling;if(box?.classList.contains('ibox'))box.classList.toggle('on');}
+
+// ── Panel open/close ──────────────────────────────────
+const panel=$i('panel');
+$i('gear').onclick=()=>panel.classList.toggle('open');
+$i('closepanel').onclick=()=>panel.classList.remove('open');
+panel.addEventListener('wheel',e=>{
+  const sc=e.target.closest('textarea,#obs-url-text');
+  if(sc&&sc.scrollHeight>sc.clientHeight){
+    const down=e.deltaY>0,up=e.deltaY<0;
+    if((down&&sc.scrollTop+sc.clientHeight<sc.scrollHeight)||(up&&sc.scrollTop>0))return;
+  }
+  if(panel.scrollHeight<=panel.clientHeight)return;
+  e.preventDefault();
+  panel.scrollTop+=e.deltaY;
+},{passive:false});
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT'||e.target.tagName==='TEXTAREA')return;
+  if(!S.shortcuts)return;
+  if(e.key==='Escape')panel.classList.remove('open');
+  else if(e.key.toLowerCase()==='s')panel.classList.toggle('open');
+  else if(e.key.toLowerCase()==='c')$i('chat').innerHTML='';
+  else if(e.key.toLowerCase()==='t')$i('tw-demo').click();
+  else if(e.key.toLowerCase()==='y')$i('yt-demo').click();
+});
+function updateShortcutsUI(){
+  const on=!!S.shortcuts;
+  $i('shortcuts-tog').checked=on;
+  $i('shortcuts-hint').textContent=on?'S · Esc · T · Y · C':'Shortcuts disabled';
+  const leg=$i('shortcuts-legend');
+  if(leg)leg.innerHTML=on?'<kbd>S</kbd> toggle panel &nbsp;·&nbsp; <kbd>Esc</kbd> close &nbsp;·&nbsp; <kbd>T</kbd> Twitch demo &nbsp;·&nbsp; <kbd>Y</kbd> YT demo &nbsp;·&nbsp; <kbd>C</kbd> clear':'';
+}
+
+// ── Form bindings ─────────────────────────────────────
+['tc','tid','tcid','ttoken','gcid','yk','yv'].forEach(k=>
+  $i(k).addEventListener('input',e=>{S[k]=e.target.value;save();})
+);
+['obsW','obsH'].forEach(k=>
+  $i(k).addEventListener('input',e=>{S[k]=e.target.value;save();})
+);
+$i('ff').onchange=e=>{S.ff=e.target.value;applyCSS();save();};
+$i('ts').onchange=e=>{S.ts=e.target.value;applyCSS();save();};
+$i('cp').onchange=e=>{S.cp=e.target.value;applyCSS();save();};
+['ptag','ucol'].forEach(k=>$i(k).onchange=e=>{S[k]=e.target.checked?1:0;save();});
+$i('emotes').onchange=e=>{S.emotes=e.target.checked?1:0;save();fetchBTTV(bttvLoadedCid||S.tid||null);};
+$i('bttvglobals').onchange=e=>{S.bttvglobals=e.target.checked?1:0;save();fetchBTTV(bttvLoadedCid||S.tid||null);};
+$i('boldtext').onchange=e=>{S.boldtext=e.target.checked?1:0;applyCSS();save();};
+$i('truncnames').onchange=e=>setNameLimit(e.target.checked);
+$i('shortcuts-tog').onchange=e=>{S.shortcuts=e.target.checked?1:0;save();updateShortcutsUI();};
+$i('bl-on').onchange=e=>{S.blon=e.target.checked?1:0;save();};
+$i('bl-names').addEventListener('input',e=>{S.blnames=e.target.value;save();updateBLCount();});
+function updateBLCount(){const n=getBlacklist().length;$i('bl-count').textContent=n?`${n} name${n>1?'s':''} blocked`:'No names blocked';}
+function getBlacklist(){return(S.blnames||'').split('\n').map(x=>x.trim().toLowerCase()).filter(Boolean);}
+rng('outline','outline','px','outlinev');
+$i('outline').addEventListener('input',()=>applyCSS());
+rng('nw','nw','px','nwv');
+$i('nw').addEventListener('input',()=>{
+  if(S.nw>=NAME_UNLIMITED_W)S.truncnames=0;
+  else S.truncnames=1;
+  $i('truncnames').checked=!!S.truncnames;
+  $i('nwv').textContent=nameLimitLabel();
+  applyCSS();save();
+});
+$i('showdot').onchange=e=>{S.showdot=e.target.checked?1:0;$i('obs-dot').classList.toggle('hidden',!S.showdot);save();};
+$i('prevbg').onchange=e=>{document.body.classList.toggle('preview-bg',e.target.checked);try{localStorage.setItem('schat5_prev',e.target.checked?'1':'0');}catch{}};
+
+function rng(id,key,u,vid){
+  $i(id).addEventListener('input',e=>{
+    S[key]=+e.target.value;
+    $i(vid).textContent=key==='lt'?(S[key]?S[key]+'s':'Never'):key==='cw'?(S[key]>=1920?'Full':S[key]+'px'):S[key]+u;
+    applyCSS();save();
+  });
+}
+rng('fs','fs','px','fsv');rng('op','op','%','opv');rng('ba','ba','%','bav');
+rng('br','br','px','brv');rng('gp','gp','px','gpv');rng('cw','cw','px','cwv');
+rng('mm','mm','','mmv');rng('lt','lt','s','ltv');
+
+// ── App window ────────────────────────────────────────
+$i('appwin').onclick=()=>{
+  const w=screen.width,h=screen.height;
+  if(!window.open(location.href,'chatoverlay',`toolbar=no,location=no,menubar=no,status=no,scrollbars=no,resizable=yes,width=${Math.round(w*.32)},height=${h},left=${Math.round(w*.68)}`))
+    alert('Popup blocked — please allow popups for this page.');
+};
+
+// ── OAuth popup ───────────────────────────────────────
+function oauthPopup(url,cb){
+  const pop=window.open(url,'oauth','width=520,height=680,scrollbars=yes');
+  if(!pop){alert('Popup blocked.');return;}
+  const iv=setInterval(()=>{
+    if(pop.closed){clearInterval(iv);return;}
+    try{
+      const combined=(pop.location.hash||'')+'&'+(pop.location.search||'');
+      const tok=new URLSearchParams(combined.replace(/^[#?&]+/,'')).get('access_token');
+      if(tok){clearInterval(iv);pop.close();cb(tok);}
+    }catch{}
+  },300);
+}
+
+$i('tw-auth').onclick=()=>{
+  const cid=$i('tcid').value.trim();if(!cid){alert('Enter your Twitch App Client ID first.');return;}
+  S.tcid=cid;save();
+  oauthPopup(`https://id.twitch.tv/oauth2/authorize?client_id=${encodeURIComponent(cid)}&redirect_uri=${encodeURIComponent(location.href.split('#')[0])}&response_type=token&scope=chat%3Aread+user%3Aread%3Aemail`,async tok=>{
+    S.ttoken=tok;
+    try{const r=await fetch('https://api.twitch.tv/helix/users',{headers:{'Authorization':`Bearer ${tok}`,'Client-Id':cid}});const d=await r.json();const u=d.data?.[0];if(u){S.tc=u.login;S.tid=u.id;$i('tc').value=u.login;$i('tid').value=u.id;}}catch{}
+    save();$i('tw-tok-ok').style.display='block';$i('tw-revoke').style.display='block';$i('tw-auth').textContent='🔄 Re-authorize';tStat('Authorized — click Connect','ok');
+  });
+};
+$i('tw-revoke').onclick=()=>{S.ttoken='';save();$i('tw-tok-ok').style.display='none';$i('tw-revoke').style.display='none';$i('tw-auth').textContent='🔒 Authorize with Twitch';tStat('Disconnected','');};
+
+$i('yt-auth').onclick=()=>{
+  const cid=$i('gcid').value.trim();if(!cid){alert('Enter your Google OAuth Client ID first.');return;}
+  S.gcid=cid;save();
+  oauthPopup(`https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(cid)}&redirect_uri=${encodeURIComponent(location.href.split('#')[0])}&response_type=token&scope=${encodeURIComponent('https://www.googleapis.com/auth/youtube.readonly')}`,tok=>{
+    S.gtoken=tok;save();$i('yt-tok-ok').style.display='block';$i('yt-revoke').style.display='block';$i('yt-auth').textContent='🔄 Re-authorize';yStat('Signed in — click Connect','ok');
+  });
+};
+$i('yt-revoke').onclick=()=>{S.gtoken='';save();$i('yt-tok-ok').style.display='none';$i('yt-revoke').style.display='none';$i('yt-auth').textContent='🔒 Sign in with Google';yStat('Disconnected','');};
+
+// ── Chat rendering ────────────────────────────────────
+const chatEl=$i('chat');
+function addMsg(platform,badges,username,color,textParts){
+  if(S.blon&&getBlacklist().includes(username.toLowerCase()))return;
+  const el=document.createElement('div');el.className=`msg ${platform}`;
+  if(S.ptag){const pt=document.createElement('span');pt.className='plat';pt.style.background=platform==='twitch'?'rgba(130,60,230,.22)':'rgba(190,30,30,.18)';pt.textContent=platform==='twitch'?'T':'Y';el.appendChild(pt);}
+  if(badges.length){const bd=document.createElement('span');bd.className='badges';badges.forEach(b=>{const i=document.createElement('img');i.src=YTB[b.img]||b.img;i.alt=b.lbl||'';i.title=b.lbl||'';bd.appendChild(i);});el.appendChild(bd);}
+  const un=document.createElement('span');un.className='uname';un.style.color=(S.ucol&&color)?color:(platform==='twitch'?'#c9a0f0':'#f09090');un.textContent=username;un.title=username;el.appendChild(un);
+  const col=document.createElement('span');col.className='colon';col.textContent=':';el.appendChild(col);
+  const tx=document.createElement('span');tx.className='text';
+  if(typeof textParts==='string')tx.textContent=textParts;
+  else textParts.forEach(p=>{if(p.t==='emote'){const i=document.createElement('img');i.className='emote';i.src=p.src||`https://static-cdn.jtvnw.net/emoticons/v2/${p.id}/default/dark/1.0`;i.alt=p.name;i.title=p.name;tx.appendChild(i);}else tx.appendChild(document.createTextNode(p.v));});
+  el.appendChild(tx);chatEl.appendChild(el);
+  const all=chatEl.querySelectorAll('.msg');let i=0,ex=all.length-S.mm;while(ex-->0)all[i++].remove();
+  if(S.lt>0)setTimeout(()=>{el.classList.add('dying');setTimeout(()=>el.remove(),900);},S.lt*1000);
+}
+
+// ── Connection status badges ──────────────────────────
+function updateConnBadge(platform,text,ok){
+  const el=$i(platform+'-badge');el.querySelector('span:last-child').textContent=text;
+  el.classList.toggle('ok',ok);
+}
+
+// ── Twitch IRC ────────────────────────────────────────
+let tWS=null,tPing=null,bttvLoadedCid='';const tG={},tC={},bttvEmotes=new Map();
+const KNOWN={vip:'b817aba4-fad8-49e2-b88a-7cc744dfa6ec',moderator:'3267646d-33f0-4b17-b3df-f923a41db1d2',broadcaster:'5527c58c-fb7d-422d-b71b-f309dcb85cc1',premium:'a1dd5073-19c3-4911-8cb4-c464a7bc1510',turbo:'bd444ec6-8f34-4bf9-91f4-af1e3428d80f',subscriber:'5d9f2208-5dd8-11e7-8513-2ff4adfae661',partner:'d97c37be-f9cd-4e59-b51e-f84808c38d23',bits:'73b5c3fb-24f9-4a82-a852-2f475b59411c',staff:'d97c37be-f9cd-4e59-b51e-f84808c38d23',global_mod:'9384c43e-4ce7-4e94-b2a1-b93656896eba'};
+const CDN=id=>`https://static-cdn.jtvnw.net/badges/v1/${id}/1`;
+const LBLS={vip:'VIP',moderator:'Moderator',broadcaster:'Broadcaster',premium:'Prime Gaming',turbo:'Turbo',subscriber:'Subscriber',partner:'Partner',bits:'Bits',staff:'Staff',global_mod:'Global Mod'};
+
+async function fetchTBadges(cid){
+  try{const r=await fetch('https://badges.twitch.tv/v1/badges/global/display');const d=await r.json();Object.assign(tG,d.badge_sets||{});}catch{}
+  if(!cid)return;
+  try{const r=await fetch(`https://badges.twitch.tv/v1/badges/channels/${cid}/display`);const d=await r.json();Object.assign(tC,d.badge_sets||{});}catch{}
+}
+function bImg(set,ver){for(const c of[tC,tG]){const s=c[set];if(s){if(s.versions[ver])return s.versions[ver].image_url_2x||s.versions[ver].image_url_1x;const k=Object.keys(s.versions);if(k.length)return s.versions[k[0]].image_url_2x||s.versions[k[0]].image_url_1x;}}return KNOWN[set]?CDN(KNOWN[set]):null;}
+async function fetchBTTV(cid){
+  bttvEmotes.clear();
+  if(!S.emotes)return;
+  const add=e=>{if(e?.code&&e?.id)bttvEmotes.set(e.code,{id:e.id,name:e.code,src:`https://cdn.betterttv.net/emote/${e.id}/2x`});};
+  if(S.bttvglobals)try{const r=await fetch('https://api.betterttv.net/3/cached/emotes/global');const d=await r.json();(Array.isArray(d)?d:[]).forEach(add);}catch{}
+  if(!cid)return;
+  try{
+    const r=await fetch(`https://api.betterttv.net/3/cached/users/twitch/${cid}`);
+    if(!r.ok)return;
+    const d=await r.json();
+    [...(d.channelEmotes||[]),...(d.sharedEmotes||[])].forEach(add);
+  }catch{}
+}
+function parseBTTVText(text){
+  if(!S.emotes||!bttvEmotes.size)return text?[{t:'text',v:text}]:[];
+  return text.split(/(\s+)/).filter(p=>p).map(p=>bttvEmotes.has(p)?{t:'emote',...bttvEmotes.get(p)}:{t:'text',v:p});
+}
+function parseEm(text,tag){
+  if(!S.emotes)return text;
+  const reps=[];
+  if(tag)for(const e of tag.split('/').filter(Boolean)){const[id,pos]=e.split(':');for(const p of pos.split(',')){const[s,en]=p.split('-').map(Number);reps.push({id,s,e:en});}}
+  reps.sort((a,b)=>a.s-b.s);
+  const pts=[];let i=0;
+  for(const r of reps){
+    if(i<r.s)pts.push(...parseBTTVText(text.slice(i,r.s)));
+    pts.push({t:'emote',id:r.id,name:text.slice(r.s,r.e+1)});
+    i=r.e+1;
+  }
+  if(i<text.length)pts.push(...parseBTTVText(text.slice(i)));
+  return pts.length?pts:text;
+}
+function parseIRC(raw){let pos=0;const tags={};if(raw[0]==='@'){const sp=raw.indexOf(' ');raw.slice(1,sp).split(';').forEach(t=>{const eq=t.indexOf('=');tags[eq>-1?t.slice(0,eq):t]=eq>-1?t.slice(eq+1):true;});pos=sp+1;}let prefix='';if(raw[pos]===':'){const sp=raw.indexOf(' ',pos);prefix=raw.slice(pos+1,sp);pos=sp+1;}const sp2=raw.indexOf(' ',pos);const cmd=sp2===-1?raw.slice(pos):raw.slice(pos,sp2);if(sp2===-1)return{tags,prefix,cmd,params:[]};pos=sp2+1;const params=[];while(pos<raw.length){if(raw[pos]===':'){params.push(raw.slice(pos+1));break;}const sp3=raw.indexOf(' ',pos);if(sp3===-1){params.push(raw.slice(pos));break;}params.push(raw.slice(pos,sp3));pos=sp3+1;}return{tags,prefix,cmd,params};}
+
+function tStat(msg,cls){$i('tstat').textContent=msg;$i('tdot').className='dot'+(cls?' '+cls:'');updateConnBadge('tw',cls==='ok'?('tw: '+S.tc):'Twitch',cls==='ok');}
+
+function connectTwitch(ch,cid,tok){
+  if(tWS){tWS.close();tWS=null;}if(tPing){clearInterval(tPing);tPing=null;}
+  if(!ch){tStat('No channel set','err');return;}
+  tStat('Connecting…','busy');updateConnBadge('tw','Connecting…',false);fetchTBadges(cid);bttvLoadedCid=cid||'';fetchBTTV(cid);
+  const ws=new WebSocket('wss://irc-ws.chat.twitch.tv:443');tWS=ws;
+  ws.onopen=()=>{
+    ws.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
+    if(tok){ws.send(`PASS oauth:${tok.replace(/^oauth:/,'')}`);ws.send(`NICK ${ch.toLowerCase()}`);}
+    else{ws.send('PASS SCHMOOPIIE');ws.send(`NICK justinfan${Math.floor(Math.random()*80000+10000)}`);}
+    ws.send(`JOIN #${ch.toLowerCase()}`);
+    tPing=setInterval(()=>ws.readyState===1&&ws.send('PING :tmi.twitch.tv'),60000);
+  };
+  ws.onmessage=e=>{
+    for(const line of e.data.split('\r\n').filter(Boolean)){
+      const m=parseIRC(line);
+      if(m.cmd==='PING'){ws.send('PONG :tmi.twitch.tv');continue;}
+      if(m.cmd==='001')tStat(`#${ch}`,'ok');
+      if(m.cmd==='PRIVMSG'){
+        const{tags,prefix,params}=m;const text=params[1]||'';
+        if(tags['room-id']&&tags['room-id']!==bttvLoadedCid){bttvLoadedCid=tags['room-id'];fetchBTTV(bttvLoadedCid);}
+        const un=tags['display-name']||prefix.split('!')[0];const col=tags['color']||null;
+        const bdgs=(tags['badges']||'').split(',').filter(Boolean).map(b=>{const[s,v]=b.split('/');const img=bImg(s,v);return img?{img,lbl:LBLS[s]||s}:null;}).filter(Boolean);
+        addMsg('twitch',bdgs,un,col,parseEm(text,tags['emotes']));
+      }
+    }
+  };
+  ws.onerror=()=>tStat('Connection error','err');
+  ws.onclose=()=>{tStat('Disconnected','');updateConnBadge('tw','Twitch',false);tWS=null;};
+}
+$i('tconn').onclick=()=>{S.tc=$i('tc').value.trim();S.tid=$i('tid').value.trim();S.ttoken=$i('ttoken').value.trim();save();connectTwitch(S.tc,S.tid||null,S.ttoken||null);};
+
+// ── YouTube ───────────────────────────────────────────
+let yTimer=null,yChatId=null,yPT=null,yFirst=true;
+function yStat(msg,cls){$i('ystat').textContent=msg;$i('ydot').className='dot'+(cls?' '+cls:'');updateConnBadge('yt',cls==='ok'?'YT: live':'YouTube',cls==='ok');}
+function parseVid(v){if(!v)return null;try{const u=new URL(v);if(u.hostname.includes('youtube.com')){if(u.searchParams.get('v'))return u.searchParams.get('v');const m=u.pathname.match(/\/(?:live|embed|shorts)\/([a-zA-Z0-9_-]{11})/);if(m)return m[1];}if(u.hostname==='youtu.be')return u.pathname.slice(1);}catch{}return /^[a-zA-Z0-9_-]{11}$/.test(v.trim())?v.trim():null;}
+function ytHdr(){return S.gtoken?{'Authorization':`Bearer ${S.gtoken}`}:{};}
+function ytK(){return S.gtoken?'':'&key='+S.yk;}
+
+async function startYT(){
+  clearTimeout(yTimer);yTimer=null;yChatId=null;yPT=null;yFirst=true;
+  const vid=parseVid($i('yv').value.trim());S.yv=$i('yv').value.trim();S.yk=$i('yk').value.trim();save();
+  if(!vid){yStat('Invalid video ID','err');return;}
+  if(!S.gtoken&&!S.yk){yStat('Need Google sign-in or API key','err');return;}
+  yStat('Finding live chat…','busy');
+  try{
+    const r=await fetch(`https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=${vid}${ytK()}`,{headers:ytHdr()});
+    const d=await r.json();if(d.error)throw new Error(d.error.message);
+    yChatId=d.items?.[0]?.liveStreamingDetails?.activeLiveChatId;
+    if(!yChatId)throw new Error('No active live chat found for this video');
+    yStat('Connected','ok');ytPoll();
+  }catch(e){yStat(e.message,'err');}
+}
+async function ytPoll(){
+  try{
+    const r=await fetch(`https://www.googleapis.com/youtube/v3/liveChat/messages?liveChatId=${encodeURIComponent(yChatId)}&part=snippet,authorDetails&maxResults=200${ytK()}${yPT?'&pageToken='+yPT:''}`,{headers:ytHdr()});
+    const d=await r.json();if(d.error)throw new Error(d.error.message);
+    if(!yFirst){
+      for(const item of d.items||[]){
+        const sn=item.snippet,au=item.authorDetails,type=sn.type;
+        if(!['textMessageEvent','superChatEvent','memberMilestoneChatEvent','newSponsorEvent'].includes(type))continue;
+        const text=sn.displayMessage||sn.textMessageDetails?.messageText||'';
+        const bdgs=[];
+        if(au.isChatOwner)bdgs.push({img:YTB.owner,lbl:'Channel Owner'});
+        if(au.isChatModerator)bdgs.push({img:YTB.mod,lbl:'Moderator'});
+        if(au.isChatSponsor)bdgs.push({img:YTB.member,lbl:'Member'});
+        if(type==='newSponsorEvent')bdgs.push({img:YTB.new,lbl:'New Member'});
+        if(type==='superChatEvent'){const amt=sn.superChatDetails?.amountDisplayString||'';addMsg('youtube',bdgs,au.displayName,'#FFD600',amt?`[Super Chat ${amt}] ${text}`:text);}
+        else addMsg('youtube',bdgs,au.displayName,null,text);
+      }
+    }
+    yFirst=false;yPT=d.nextPageToken;
+    yTimer=setTimeout(ytPoll,d.pollingIntervalMillis||5000);
+  }catch(e){yStat(`Poll error: ${e.message}`,'err');yTimer=setTimeout(ytPoll,15000);}
+}
+$i('yconn').onclick=startYT;
+
+// ── Demo modes ────────────────────────────────────────
+const TW_POOL=[
+  {b:['broadcaster'],n:'YourChannel',c:'#FF4040',m:'Welcome to the stream! 🎮'},
+  {b:['moderator'],n:'ModMike',c:'#00CED1',m:'Chat rules are pinned — stay kind!'},
+  {b:['vip'],n:'VIPVal',c:'#FF69B4',m:'hype train incoming PogChamp'},
+  {b:['subscriber','premium'],n:'PrimeBro',c:'#9B59B6',m:'Prime sub checking in LUL'},
+  {b:[],n:'RandomChatter',c:'#1E90FF',m:'first time in chat, this is sick'},
+  {b:['bits'],n:'BitsDonor',c:'#FFD700',m:'cheer200 love the content!'},
+  {b:['subscriber'],n:'SubSam',c:'#2ECC71',m:'that play was absolutely insane Kreygasm'},
+  {b:[],n:'Lurker99',c:'#FF6347',m:'what game is this?'},
+  {b:['vip','subscriber'],n:'VIPSub',c:'#FF1493',m:'W stream monkaS never miss one'},
+  {b:['moderator'],n:'Mod2',c:'#20B2AA',m:'@Lurker99 check the stream title!'},
+  {b:[],n:'GamerGuru',c:'#7B68EE',m:'the setup on that was super clean'},
+  {b:['subscriber'],n:'SubSister',c:'#3CB371',m:'this community is the best honestly'},
+];
+const YT_POOL=[
+  {b:[{img:YTB.owner,lbl:'Owner'}],n:'StreamerName',m:'Hey everyone, welcome to the stream! 👋'},
+  {b:[{img:YTB.mod,lbl:'Moderator'}],n:'ModJane',m:'Chat, please keep it respectful! 🛡️'},
+  {b:[{img:YTB.member,lbl:'Member (12 mo)'}],n:'LoyalViewer',m:'Been watching a whole year, love this'},
+  {b:[],n:'RandomViewer',m:'first time here, this is awesome!'},
+  {b:[{img:YTB.member,lbl:'Member (3 mo)'}],n:'CoolFan99',m:'lmaooo that was so good'},
+  {b:[{img:YTB.new,lbl:'New Member'}],n:'JustJoined',m:'Just became a member! Happy to support 🎉'},
+  {b:[],n:'ChatterMax',m:'W in chat for that play'},
+  {b:[{img:YTB.mod,lbl:'Moderator'}],n:'ModBot',m:'Reminder: no spam, be kind 🙏'},
+  {b:[{img:YTB.member,lbl:'Member (6 mo)'}],n:'HalfYearHero',m:'half year strong'},
+  {b:[],n:'NightOwl',m:'watching at 2am, zero regrets'},
+];
+
+let twDT=null,twDI=0,ytDT=null,ytDI=0;
+
+$i('tw-demo').onclick=()=>{
+  if(twDT){clearInterval(twDT);twDT=null;$i('tw-demo').classList.remove('on');$i('tw-demo').textContent='💜 Twitch Demo';return;}
+  $i('tw-demo').classList.add('on');$i('tw-demo').textContent='⏹ Stop';
+  const fire=()=>{const m=TW_POOL[twDI++%TW_POOL.length];const bdgs=m.b.map(k=>({img:CDN(KNOWN[k])||'',lbl:LBLS[k]||k})).filter(b=>b.img);addMsg('twitch',bdgs,m.n,m.c,m.m);};
+  fire();twDT=setInterval(fire,2000);
+};
+$i('yt-demo').onclick=()=>{
+  if(ytDT){clearInterval(ytDT);ytDT=null;$i('yt-demo').classList.remove('on');$i('yt-demo').textContent='🔴 YouTube Demo';return;}
+  $i('yt-demo').classList.add('on');$i('yt-demo').textContent='⏹ Stop';
+  let sc=false;
+  const fire=()=>{const m=YT_POOL[ytDI++%YT_POOL.length];if(!sc&&ytDI%7===0){sc=true;addMsg('youtube',[{img:YTB.owner,lbl:'Owner'}],'StreamerName','#FFD600','[Super Chat $10.00] love the streams!');}else addMsg('youtube',m.b,m.n,null,m.m);};
+  fire();ytDT=setInterval(fire,2400);
+};
+
+// ── Static test messages ──────────────────────────────
+$i('testbtn').onclick=()=>{
+  const B=k=>CDN(KNOWN[k]);
+  addMsg('twitch',[{img:B('vip'),lbl:'VIP'},{img:B('moderator'),lbl:'Mod'}],'CoolStreamer','#9147FF',[{t:'text',v:'Hello Twitch! '},{t:'emote',id:'25',name:'Kappa'}]);
+  setTimeout(()=>addMsg('youtube',[{img:YTB.member,lbl:'Member'}],'AwesomeViewer',null,'Hello YouTube! ❤️'),150);
+  setTimeout(()=>addMsg('twitch',[{img:B('subscriber'),lbl:'Sub'},{img:B('premium'),lbl:'Prime'}],'PrimeSub','#FF69B4','Prime sub LUL'),300);
+  setTimeout(()=>addMsg('youtube',[{img:YTB.owner,lbl:'Owner'},{img:YTB.mod,lbl:'Mod'}],'ChannelOwner',null,'Welcome!'),450);
+  setTimeout(()=>addMsg('twitch',[{img:B('broadcaster'),lbl:'Broadcaster'}],'StreamerName','#FF0000','Thanks for watching!'),600);
+  setTimeout(()=>addMsg('youtube',[{img:YTB.new,lbl:'New Member'}],'Newcomer',null,'Just joined! 🎉'),750);
+};
+$i('clearbtn').onclick=()=>chatEl.innerHTML='';
+
+// ── Init ──────────────────────────────────────────────
+(async function init(){
+  load();populateUI();applyCSS();updateShortcutsUI();
+  await loadServerConfig();
+  populateUI();applyCSS();watchServerConfig();watchServerChat();
+  if(S.tc)connectTwitch(S.tc,S.tid||null,S.ttoken||null);
+  if(!SERVER_MODE&&S.yv&&(S.yk||S.gtoken))startYT();
+  // open panel on first run (no settings yet)
+  if(!S.tc&&!S.yv)panel.classList.add('open');
+})();
+</script>
+</body>
+</html>

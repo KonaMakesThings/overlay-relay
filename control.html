@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chat Overlay Control</title>
+<style>
+:root{font-family:Inter,Segoe UI,Arial,sans-serif;color:#eee;background:#0b0a15}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px}
+main{width:min(720px,100%);background:#121022;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+h1{font-size:20px;margin:0 0 6px}
+p{margin:0 0 18px;color:rgba(255,255,255,.55);line-height:1.5}
+label{display:block;margin:14px 0 6px;font-size:12px;font-weight:700;color:rgba(255,255,255,.68)}
+input{width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.12);background:#19162d;color:#fff;font-size:14px;outline:none}
+input:focus{border-color:#7c4dff}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+button{margin-top:18px;padding:10px 14px;border:0;border-radius:8px;background:#7c4dff;color:#fff;font-weight:700;cursor:pointer}
+button:hover{filter:brightness(1.08)}
+.box{margin-top:18px;padding:12px;border-radius:8px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.08);font-size:13px;color:rgba(255,255,255,.66)}
+.url{display:block;margin-top:6px;color:#c7b6ff;word-break:break-all;font-family:Consolas,monospace}
+.ok{color:#7bd88f}
+.err{color:#ff8d8d}
+@media(max-width:640px){.row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Chat Overlay Control</h1>
+  <p>Update the stream target here. OBS can stay pointed at the same local overlay URL.</p>
+
+  <form id="form">
+    <label for="youtubeUrl">YouTube video or live URL</label>
+    <input id="youtubeUrl" name="youtubeUrl" placeholder="https://www.youtube.com/watch?v=...">
+
+    <label for="youtubeApiKey">YouTube API key</label>
+    <input id="youtubeApiKey" name="youtubeApiKey" type="password" autocomplete="off" spellcheck="false" placeholder="AIzaSy...">
+
+    <div class="row">
+      <div>
+        <label for="twitchChannel">Twitch channel</label>
+        <input id="twitchChannel" name="twitchChannel" placeholder="your_channel">
+      </div>
+      <div>
+        <label for="twitchChannelId">Twitch channel ID</label>
+        <input id="twitchChannelId" name="twitchChannelId" placeholder="123456789">
+      </div>
+    </div>
+
+    <button type="submit">Save and update OBS</button>
+  </form>
+
+  <div class="box">
+    OBS Browser Source URL:
+    <span class="url" id="obsUrl"></span>
+  </div>
+  <div class="box" id="status">Loading settings...</div>
+</main>
+
+<script>
+const form=document.getElementById('form');
+const statusEl=document.getElementById('status');
+document.getElementById('obsUrl').textContent=`${location.origin}/stream_chat_overlay.html`;
+
+function setStatus(text,cls=''){
+  statusEl.className='box '+cls;
+  statusEl.textContent=text;
+}
+
+async function loadConfig(){
+  const r=await fetch('/api/config',{cache:'no-store'});
+  if(!r.ok)throw new Error('Could not load settings');
+  const cfg=await r.json();
+  for(const [k,v]of Object.entries(cfg)){
+    if(form.elements[k])form.elements[k].value=v||'';
+  }
+  setStatus('Ready. Save here after you create a new YouTube livestream.','ok');
+}
+
+form.addEventListener('submit',async e=>{
+  e.preventDefault();
+  const cfg=Object.fromEntries(new FormData(form).entries());
+  setStatus('Saving...');
+  try{
+    const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)});
+    if(!r.ok)throw new Error((await r.json()).error||'Save failed');
+    setStatus('Saved. OBS overlay has been notified.','ok');
+  }catch(err){
+    setStatus(err.message,'err');
+  }
+});
+
+loadConfig().catch(err=>setStatus(err.message,'err'));
+</script>
+</body>
+</html>
