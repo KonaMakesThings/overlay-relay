@@ -2,7 +2,7 @@
 
 Combined Twitch + YouTube chat for OBS.
 
-This project is designed for streamers, not developers. Once it is running, you can change the active YouTube stream or Twitch channel from a simple control page without rebuilding your OBS scene.
+I got frustrated with all the available overlays that combine Youtube + Twitch chat, so I made this! This simple overlay will combine your Twitch chat with a Youtube stream chat of your choice. Highly customizable.
 
 ## What it does
 
@@ -11,7 +11,7 @@ This project is designed for streamers, not developers. Once it is running, you 
 - Shows names, colors, badges, emotes, and optional platform labels
 - Includes controls for font size, backgrounds, spacing, message lifetime, and more
 - Lets you preview the overlay with built-in demo messages
-- Runs locally on your computer—there is no hosted account or remote control service
+- Runs locally on your computer, meaning there is no hosted account or remote control service
 
 ## What you need
 
@@ -57,7 +57,7 @@ In OBS:
 
 1. Open the scene where you want chat to appear.
 2. Under **Sources**, select **+** and then **Browser**.
-3. Create a new source named `Combined Chat`.
+3. Create a new source named `OverlayRelay` or whatever you want it to be.
 4. Use this URL:
 
    ```text
