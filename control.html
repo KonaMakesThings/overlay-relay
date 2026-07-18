@@ -14,14 +14,12 @@ p{margin:0 0 18px;color:rgba(255,255,255,.55);line-height:1.5}
 label{display:block;margin:14px 0 6px;font-size:12px;font-weight:700;color:rgba(255,255,255,.68)}
 input{width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.12);background:#19162d;color:#fff;font-size:14px;outline:none}
 input:focus{border-color:#7c4dff}
-.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 button{margin-top:18px;padding:10px 14px;border:0;border-radius:8px;background:#7c4dff;color:#fff;font-weight:700;cursor:pointer}
 button:hover{filter:brightness(1.08)}
 .box{margin-top:18px;padding:12px;border-radius:8px;background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.08);font-size:13px;color:rgba(255,255,255,.66)}
 .url{display:block;margin-top:6px;color:#c7b6ff;word-break:break-all;font-family:Consolas,monospace}
 .ok{color:#7bd88f}
 .err{color:#ff8d8d}
-@media(max-width:640px){.row{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -30,22 +28,11 @@ button:hover{filter:brightness(1.08)}
   <p>Update the stream target here. OBS can stay pointed at the same local overlay URL.</p>
 
   <form id="form">
-    <label for="youtubeUrl">YouTube video or live URL</label>
+    <label for="youtubeUrl">YouTube video ID or URL</label>
     <input id="youtubeUrl" name="youtubeUrl" placeholder="https://www.youtube.com/watch?v=...">
 
-    <label for="youtubeApiKey">YouTube API key</label>
-    <input id="youtubeApiKey" name="youtubeApiKey" type="password" autocomplete="off" spellcheck="false" placeholder="AIzaSy...">
-
-    <div class="row">
-      <div>
-        <label for="twitchChannel">Twitch channel</label>
-        <input id="twitchChannel" name="twitchChannel" placeholder="your_channel">
-      </div>
-      <div>
-        <label for="twitchChannelId">Twitch channel ID</label>
-        <input id="twitchChannelId" name="twitchChannelId" placeholder="123456789">
-      </div>
-    </div>
+    <label for="twitchChannel">Twitch channel name</label>
+    <input id="twitchChannel" name="twitchChannel" placeholder="your_channel">
 
     <button type="submit">Save and update OBS</button>
   </form>

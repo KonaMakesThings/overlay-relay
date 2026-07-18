@@ -21,7 +21,7 @@ I got frustrated with all the available overlays that combine Youtube + Twitch c
 - Your Twitch channel name
 - The URL of your YouTube livestream, if you want YouTube chat
 
-You can read Twitch chat anonymously and use the local YouTube helper without entering an OAuth token. Optional sign-in and API-key controls are available for advanced setups.
+OverlayRelay only needs a Twitch channel name and a YouTube video ID or URL. No Twitch sign-in, Google sign-in, API key, or manually entered channel ID is required.
 
 ## Quick start
 
@@ -49,7 +49,7 @@ On the control page:
 2. Enter your Twitch channel name.
 3. Select **Save and update OBS**.
 
-The YouTube API key and Twitch channel ID fields are optional for the normal local setup.
+Those are the only connection details OverlayRelay needs.
 
 ### 4. Add it to OBS
 
@@ -66,6 +66,8 @@ In OBS:
 
 5. Set the width and height to match your OBS canvas, commonly `1920 × 1080`.
 6. Select **OK**.
+
+OverlayRelay places chat in the bottom-left corner of the browser canvas by default. To position it elsewhere in OBS, hold `Alt` and drag the Browser Source edges to crop away unused transparent space, then move the cropped source where you want it. You can also choose left, center, or right alignment from OverlayRelay's settings.
 
 If port `8080` was already in use, the terminal will show the alternate port selected by the helper. Use that port in both URLs.
 
@@ -123,10 +125,4 @@ When you are finished, close the terminal window running the helper or press `Ct
 
 The helper only listens on your computer and is not intended to be exposed to the internet.
 
-Your personal settings are stored in `overlay-config.json`. This ignored local file may contain a YouTube API key. Never commit or share the real file. `overlay-config.example.json` is the safe blank example included in the repository.
-
-OAuth tokens entered into the full settings panel are stored in that browser's local storage. Do not share browser profiles, copied profile data, or screenshots that reveal token fields.
-
-## Technical documentation
-
-Developers and contributors can find architecture, endpoints, storage behavior, security boundaries, and testing notes in [TECHNICAL.md](TECHNICAL.md).
+Your stream targets are stored in `overlay-config.json`. This local file contains the current YouTube URL and Twitch channel name, and Git is configured not to upload it. `overlay-config.example.json` is the blank, publishable example included in the repository.

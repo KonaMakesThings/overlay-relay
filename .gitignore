@@ -1,8 +1,9 @@
-# Local runtime configuration may contain API keys or channel details.
+# Local runtime configuration contains stream-specific settings.
 overlay-config.json
 
 # Generated process state.
 overlay-server.pid
+overlay-server.json
 
 # Common local/editor noise.
 .DS_Store
@@ -10,4 +11,13 @@ Thumbs.db
 *.log
 .vscode/
 .idea/
+node_modules/
 
+# Environment and credential files should never be published.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx

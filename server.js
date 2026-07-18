@@ -6,7 +6,7 @@ const START_PORT = Number(process.env.PORT || 8080);
 const HOST = '127.0.0.1';
 const ROOT = __dirname;
 const CONFIG_FILE = path.join(ROOT, 'overlay-config.json');
-const PID_FILE = path.join(ROOT, 'overlay-server.pid');
+const STATE_FILE = path.join(ROOT, 'overlay-server.json');
 const clients = new Set();
 const chatClients = new Set();
 let ytTimer = null;
@@ -18,15 +18,11 @@ const seenYtMessages = new Set();
 
 const defaults = {
   youtubeUrl: '',
-  youtubeApiKey: '',
-  twitchChannel: '',
-  twitchChannelId: ''
+  twitchChannel: ''
 };
 const CONFIG_LIMITS = {
   youtubeUrl: 2048,
-  youtubeApiKey: 256,
-  twitchChannel: 64,
-  twitchChannelId: 32
+  twitchChannel: 64
 };
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -74,7 +70,13 @@ function fetchWithTimeout(url, options = {}) {
 
 function readConfig() {
   try {
-    return { ...defaults, ...JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')) };
+    const saved = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+    const clean = {};
+    for (const key of Object.keys(defaults)) {
+      clean[key] = String(saved[key] || '').trim().slice(0, CONFIG_LIMITS[key]);
+    }
+    if (clean.twitchChannel && !/^[a-zA-Z0-9_]{1,25}$/.test(clean.twitchChannel)) clean.twitchChannel = '';
+    return clean;
   } catch {
     return { ...defaults };
   }
@@ -87,9 +89,6 @@ function writeConfig(config) {
   }
   if (clean.twitchChannel && !/^[a-zA-Z0-9_]{1,25}$/.test(clean.twitchChannel)) {
     throw new Error('Twitch channel must contain only letters, numbers, or underscores.');
-  }
-  if (clean.twitchChannelId && !/^\d{1,25}$/.test(clean.twitchChannelId)) {
-    throw new Error('Twitch channel ID must contain only digits.');
   }
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(clean, null, 2));
   return clean;
@@ -386,7 +385,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname === '/api/version' && req.method === 'GET') {
-    sendJson(res, 200, { name: 'twitch-chat-overlay-helper', version: 3, videoId: ytCurrentVideoId });
+    sendJson(res, 200, { name: 'twitch-chat-overlay-helper', version: 4, videoId: ytCurrentVideoId });
     return;
   }
 
@@ -494,7 +493,15 @@ const server = http.createServer(async (req, res) => {
 });
 
 function listen(port, attemptsLeft = 20) {
+  const onListening = () => {
+    fs.writeFileSync(STATE_FILE, JSON.stringify({ pid: process.pid, port }));
+    console.log(`Overlay helper running on http://localhost:${port} (loopback only)`);
+    console.log(`Control page: http://localhost:${port}/control`);
+    console.log(`OBS URL:      http://localhost:${port}/stream_chat_overlay.html`);
+  };
+  server.once('listening', onListening);
   server.once('error', err => {
+    server.removeListener('listening', onListening);
     if (err.code === 'EADDRINUSE' && attemptsLeft > 0) {
       console.log(`Port ${port} is already in use by another process, trying ${port + 1}...`);
       listen(port + 1, attemptsLeft - 1);
@@ -502,23 +509,21 @@ function listen(port, attemptsLeft = 20) {
     }
     throw err;
   });
-  server.listen(port, HOST, () => {
-    fs.writeFileSync(PID_FILE, String(process.pid));
-    console.log(`Overlay helper running on http://localhost:${port} (loopback only)`);
-    console.log(`Control page: http://localhost:${port}/control`);
-    console.log(`OBS URL:      http://localhost:${port}/stream_chat_overlay.html`);
-  });
+  server.listen(port, HOST);
 }
 
+const initialConfig = readConfig();
+if (fs.existsSync(CONFIG_FILE)) writeConfig(initialConfig);
 listen(START_PORT);
-startYoutubeChat(readConfig());
+startYoutubeChat(initialConfig);
 
-function cleanupPid() {
+function cleanupState() {
   try {
-    if (fs.existsSync(PID_FILE) && fs.readFileSync(PID_FILE, 'utf8').trim() === String(process.pid)) {
-      fs.unlinkSync(PID_FILE);
+    if (fs.existsSync(STATE_FILE)) {
+      const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+      if (String(state.pid) === String(process.pid)) fs.unlinkSync(STATE_FILE);
     }
   } catch {}
 }
-process.on('exit', cleanupPid);
+process.on('exit', cleanupState);
 process.on('SIGINT', () => process.exit(0));
