@@ -126,3 +126,7 @@ When you are finished, close the terminal window running the helper or press `Ct
 The helper only listens on your computer and is not intended to be exposed to the internet.
 
 Your stream targets are stored in `overlay-config.json`. This local file contains the current YouTube URL and Twitch channel name, and Git is configured not to upload it. `overlay-config.example.json` is the blank, publishable example included in the repository.
+
+## License
+
+OverlayRelay is available under the [MIT License](LICENSE). You may use, modify, and share it, including for commercial purposes, as long as the license and copyright notice are kept with the software.
