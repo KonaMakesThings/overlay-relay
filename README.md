@@ -2,7 +2,7 @@
 
 Combined Twitch + YouTube chat for OBS.
 
-I got frustrated with all the available overlays that combine Youtube + Twitch chat, so I made this! This simple overlay will combine your Twitch chat with a Youtube stream chat of your choice. Highly customizable.
+I got frustrated with all the available overlays that combine Youtube + Twitch chat, so I made this! This simple overlay will combine your Twitch chat with your Youtube stream chat. Highly customizable.
 
 ## What it does
 
