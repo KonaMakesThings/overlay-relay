@@ -24,6 +24,21 @@ const CONFIG_LIMITS = {
   youtubeUrl: 2048,
   twitchChannel: 64
 };
+// YouTube chat is polled, not pushed, so messages arrive in batches. Measured against
+// a live stream: YouTube asks for a 10s poll interval (we use 2.5s), the newest message
+// in a batch is already ~1.2s old on arrival, and the first poll replays ~90s of chat.
+const YT_BACKLOG_MS = 10_000; // on connect, ignore chat older than this
+const YT_BACKLOG_MAX = 8;     // ...and show at most this many, however busy the chat
+// Drain each batch across (almost) the whole gap until the next poll, so messages keep
+// flowing instead of arriving in a rush followed by dead air. Draining faster than this
+// is what made chat look bursty even once batches were split up.
+const YT_SPREAD_RATIO = 0.9;
+const YT_MAX_GAP_MS = 450;    // cap for sparse chat, so two messages aren't held apart
+const ytQueue = [];
+let ytDrainTimer = null;
+let ytPrimed = false;         // false until the first batch has been handled
+let ytPollDelay = 2500;       // the interval actually in use, tracked for the drain rate
+
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -36,7 +51,7 @@ function securityHeaders(contentType) {
     'Cross-Origin-Resource-Policy': 'same-origin'
   };
   if (contentType?.startsWith('text/html')) {
-    headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https: wss:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+    headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https: wss:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
   }
   return headers;
 }
@@ -129,14 +144,13 @@ function readBody(req) {
   });
 }
 
-function broadcastConfig(config) {
-  const msg = `event: config\ndata: ${JSON.stringify(config)}\n\n`;
-  for (const res of clients) res.write(msg);
+function sseEvent(event, data) {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
-function broadcastChat(event, data) {
-  const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-  for (const res of chatClients) res.write(msg);
+function broadcast(subscribers, event, data) {
+  const msg = sseEvent(event, data);
+  for (const res of subscribers) res.write(msg);
 }
 
 function parseVideoId(value) {
@@ -203,20 +217,45 @@ function proxiedImage(url) {
   return `/api/img?url=${encodeURIComponent(url)}`;
 }
 
+// Google/YouTube-owned image CDNs. Emoji and avatars are spread across several of
+// these: custom channel emoji come from ggpht, standard emoji from gstatic, and
+// avatars from googleusercontent. Matching whole hosts (not URL prefixes) keeps the
+// proxy locked to Google origins while surviving CDN shard changes.
+const IMAGE_HOST_SUFFIXES = ['ggpht.com', 'googleusercontent.com', 'ytimg.com', 'gstatic.com', 'youtube.com'];
+
+function isAllowedImageHost(target) {
+  let parsed;
+  try {
+    parsed = new URL(target);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'https:') return false;
+  const host = parsed.hostname.toLowerCase();
+  return IMAGE_HOST_SUFFIXES.some(domain => host === domain || host.endsWith(`.${domain}`));
+}
+
+// Returns a rendered part for an emoji run — an 'emote' when there is a usable
+// image, otherwise a 'text' part. It must never return null for a run that really
+// holds an emoji: emoji runs carry no `text` field, so anything dropped here
+// disappears from the message entirely rather than degrading to something readable.
 function emojiFromRun(run) {
-  const emoji = run.emoji || run.customEmoji || run.liveChatCustomEmojiRenderer;
-  if (emoji) {
-    const src = bestThumb(emoji.image || emoji.thumbnail || emoji.customThumbnail);
-    const name = emoji.shortcuts?.[0] || emoji.emojiId || emoji.label || run.text || 'emoji';
-    if (src) return { t: 'emote', name, src: proxiedImage(src) };
-  }
-  const renderer = findKey(run, 'liveChatCustomEmojiRenderer') || findKey(run, 'emoji');
-  if (renderer && typeof renderer === 'object') {
-    const src = bestThumb(renderer.image || renderer.thumbnail || renderer.customThumbnail);
-    const name = renderer.shortcuts?.[0] || renderer.emojiId || renderer.label || run.text || 'emoji';
-    if (src) return { t: 'emote', name, src: proxiedImage(src) };
-  }
-  return null;
+  const emoji = run.emoji || run.customEmoji || run.liveChatCustomEmojiRenderer
+    || findKey(run, 'liveChatCustomEmojiRenderer') || findKey(run, 'emoji');
+  if (!emoji || typeof emoji !== 'object') return null;
+
+  const emojiId = String(emoji.emojiId || '');
+  const label = emoji.shortcuts?.[0] || emoji.label || '';
+  // Standard emoji carry the literal character in emojiId (custom ones use a
+  // "channelId/emojiId" form). Emitting the character beats proxying an image:
+  // it always renders, needs no network round-trip, and picks up the chat font.
+  const isCustom = emoji.isCustomEmoji === true || emojiId.includes('/');
+  if (!isCustom && emojiId && /[^\x00-\x7F]/.test(emojiId)) return { t: 'text', v: emojiId };
+
+  const src = bestThumb(emoji.image || emoji.thumbnail || emoji.customThumbnail);
+  if (src) return { t: 'emote', name: label || 'emoji', src: proxiedImage(src) };
+  // No usable image — fall back to the shortcut text so the emoji still shows.
+  return label ? { t: 'text', v: label } : null;
 }
 
 function textOf(node) {
@@ -255,18 +294,57 @@ function normalizeYtRenderer(renderer) {
   return { platform: 'youtube', username: author, badges, color: null, parts };
 }
 
+// A poll returns every message since the last one — measured at 6-11 at a time on a
+// busy stream. Emitting them in one synchronous loop makes them all land in the same
+// frame, so chat arrives in clumps instead of a stream. These queue and trickle out.
+function releaseYtQueue() {
+  ytDrainTimer = null;
+  const msg = ytQueue.shift();
+  if (!msg) return;
+  broadcast(chatClients, 'message', msg);
+  if (!ytQueue.length) return;
+  // pace so the queue empties just as the next poll lands — a batch's messages were
+  // really sent ~2s apart, so this restores their spacing rather than inventing lag
+  const gap = Math.min(YT_MAX_GAP_MS, (ytPollDelay * YT_SPREAD_RATIO) / ytQueue.length);
+  ytDrainTimer = setTimeout(releaseYtQueue, gap);
+}
+
+function queueYtMessages(messages) {
+  if (!messages.length) return;
+  ytQueue.push(...messages);
+  if (!ytDrainTimer) releaseYtQueue(); // first message of an idle queue goes out now
+}
+
+function resetYtQueue() {
+  ytQueue.length = 0;
+  clearTimeout(ytDrainTimer);
+  ytDrainTimer = null;
+  ytPrimed = false;
+}
+
 function emitYtActions(actions = []) {
+  const now = Date.now();
+  const fresh = [];
   for (const action of actions) {
     const item = action.addChatItemAction?.item;
     const renderer = item?.liveChatTextMessageRenderer || item?.liveChatPaidMessageRenderer;
+    if (!renderer) continue;
+    // The first poll replays a backlog — measured at 71 messages spanning 90s — which
+    // would otherwise flood the overlay the instant it connects.
+    const sentAt = Number(renderer.timestampUsec) / 1000;
+    if (!ytPrimed && sentAt && now - sentAt > YT_BACKLOG_MS) continue;
     const msg = normalizeYtRenderer(renderer);
-    if (msg) broadcastChat('message', msg);
+    if (msg) fresh.push(msg);
   }
+  // an age cut alone still lets a fast chat dump dozens on connect, so cap the count
+  const batch = ytPrimed ? fresh : fresh.slice(-YT_BACKLOG_MAX);
+  ytPrimed = true;
+  queueYtMessages(batch);
 }
 
 async function initYoutubeChat(videoId) {
   const watchUrl = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
-  const html = await fetch(watchUrl, {
+  const html = await fetchWithTimeout(watchUrl, {
     headers: { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'en-US,en;q=0.9' }
   }).then(r => r.text());
   ytApiKey = html.match(/"INNERTUBE_API_KEY":"([^"]+)"/)?.[1];
@@ -293,7 +371,7 @@ async function pollYoutubeChat() {
       },
       continuation: ytContinuation
     };
-    const res = await fetch(`https://www.youtube.com/youtubei/v1/live_chat/get_live_chat?key=${encodeURIComponent(ytApiKey)}`, {
+    const res = await fetchWithTimeout(`https://www.youtube.com/youtubei/v1/live_chat/get_live_chat?key=${encodeURIComponent(ytApiKey)}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -312,10 +390,11 @@ async function pollYoutubeChat() {
       || next?.reloadContinuationData?.continuation
       || ytContinuation;
     const delay = next?.timedContinuationData?.timeoutMs || next?.invalidationContinuationData?.timeoutMs || 2500;
-    ytTimer = setTimeout(pollYoutubeChat, Math.max(1000, Math.min(Number(delay) || 2500, 2500)));
-    broadcastChat('status', { platform: 'youtube', text: 'Connected', ok: true });
+    ytPollDelay = Math.max(1000, Math.min(Number(delay) || 2500, 2500));
+    ytTimer = setTimeout(pollYoutubeChat, ytPollDelay);
+    broadcast(chatClients, 'status', { platform: 'youtube', text: 'Connected', ok: true });
   } catch (err) {
-    broadcastChat('status', { platform: 'youtube', text: `YouTube helper error: ${err.message}`, ok: false });
+    broadcast(chatClients, 'status', { platform: 'youtube', text: `YouTube helper error: ${err.message}`, ok: false });
     ytTimer = setTimeout(pollYoutubeChat, 10000);
   }
 }
@@ -326,17 +405,18 @@ async function startYoutubeChat(config) {
   ytContinuation = null;
   ytApiKey = null;
   seenYtMessages.clear();
+  resetYtQueue();
   ytCurrentVideoId = parseVideoId(config.youtubeUrl);
   if (!ytCurrentVideoId) {
-    broadcastChat('status', { platform: 'youtube', text: 'Waiting for YouTube URL', ok: false });
+    broadcast(chatClients, 'status', { platform: 'youtube', text: 'Waiting for YouTube URL', ok: false });
     return;
   }
-  broadcastChat('status', { platform: 'youtube', text: 'Connecting to YouTube web chat...', ok: false });
+  broadcast(chatClients, 'status', { platform: 'youtube', text: 'Connecting to YouTube web chat...', ok: false });
   try {
     await initYoutubeChat(ytCurrentVideoId);
     pollYoutubeChat();
   } catch (err) {
-    broadcastChat('status', { platform: 'youtube', text: err.message, ok: false });
+    broadcast(chatClients, 'status', { platform: 'youtube', text: err.message, ok: false });
   }
 }
 
@@ -391,7 +471,7 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === '/api/img' && req.method === 'GET') {
     const target = url.searchParams.get('url') || '';
-    if (!/^https:\/\/(yt3\.ggpht\.com|yt4\.ggpht\.com|yt3\.googleusercontent\.com|i\.ytimg\.com|www\.youtube\.com|youtube\.com)\//i.test(target)) {
+    if (!isAllowedImageHost(target)) {
       res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8', ...securityHeaders('text/plain') });
       res.end('Unsupported image host');
       return;
@@ -444,7 +524,7 @@ const server = http.createServer(async (req, res) => {
       }
       const config = writeConfig({ ...readConfig(), ...incoming });
       sendJson(res, 200, config);
-      broadcastConfig(config);
+      broadcast(clients, 'config', config);
       startYoutubeChat(config);
     } catch (err) {
       sendJson(res, 400, { error: err.message });
@@ -460,7 +540,7 @@ const server = http.createServer(async (req, res) => {
       ...securityHeaders('text/event-stream')
     });
     clients.add(res);
-    res.write(`event: config\ndata: ${JSON.stringify(readConfig())}\n\n`);
+    res.write(sseEvent('config', readConfig()));
     req.on('close', () => clients.delete(res));
     return;
   }
@@ -473,7 +553,7 @@ const server = http.createServer(async (req, res) => {
       ...securityHeaders('text/event-stream')
     });
     chatClients.add(res);
-    res.write(`event: status\ndata: ${JSON.stringify({ platform: 'youtube', text: ytCurrentVideoId ? 'YouTube helper active' : 'Waiting for YouTube URL', ok: !!ytCurrentVideoId })}\n\n`);
+    res.write(sseEvent('status', { platform: 'youtube', text: ytCurrentVideoId ? 'YouTube helper active' : 'Waiting for YouTube URL', ok: !!ytCurrentVideoId }));
     req.on('close', () => chatClients.delete(res));
     return;
   }

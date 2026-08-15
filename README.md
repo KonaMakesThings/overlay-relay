@@ -75,7 +75,7 @@ If port `8080` was already in use, the terminal will show the alternate port sel
 
 Open the overlay URL in a regular browser and select the gear button. You can adjust:
 
-- Font, size, and text outline
+- Font and size
 - Chat position and width
 - Background transparency and corner rounding
 - Message spacing, lifetime, and maximum message count
@@ -83,6 +83,19 @@ Open the overlay URL in a regular browser and select the gear button. You can ad
 - A username blacklist for bots or unwanted accounts
 
 Use the Twitch Demo, YouTube Demo, or test-message buttons to preview changes without going live.
+
+### Keeping chat readable over video
+
+The **Legibility over video** controls decide whether chat survives a bright or busy
+scene. There are two, and they stack:
+
+- **Outline** wraps each letter in a solid edge. This is the single most effective
+  setting — a value of 2 is usually enough.
+- **Shadow** adds separation underneath. **Halo** and **Heavy** surround the text
+  evenly and suit busy footage; **Hard** offsets it for a sharper look.
+
+Turn on the dark preview background while you adjust them, then check the result over
+your actual scene.
 
 ## Everyday use
 
@@ -114,6 +127,31 @@ When you are finished, close the terminal window running the helper or press `Ct
 - Use the full livestream URL or its 11-character video ID.
 - Confirm live chat is enabled for that video.
 - Recently ended streams may work while YouTube chat replay remains available.
+
+### YouTube messages arrive later than Twitch
+
+This is expected, and most of it cannot be fixed.
+
+Twitch sends chat over a socket that stays open, so messages arrive almost instantly.
+YouTube has no equivalent public feed, so OverlayRelay has to ask YouTube for new
+messages on a timer. Messages are already about a second old when YouTube hands them
+over, and the wait between checks adds up to a couple of seconds more. Expect YouTube
+chat to trail Twitch by roughly one to four seconds.
+
+OverlayRelay does spread each batch out as it arrives, so YouTube chat flows steadily
+rather than appearing in bursts. Checking more often would save around a second at the
+risk of YouTube rate-limiting you, so it deliberately does not.
+
+### Settings changes do not seem to take effect
+
+Appearance settings apply as soon as you change them. Anything that changes how the
+helper itself behaves takes effect only when the helper restarts — close the terminal
+window and run `start-overlay.bat` again.
+
+Note that OBS keeps its own copy of the appearance settings, separate from your normal
+browser. To carry a look across, either paste the OBS URL from the settings panel into
+your Browser Source, or right-click the source in OBS, choose **Interact**, and adjust
+the settings there.
 
 ### The control page will not open
 

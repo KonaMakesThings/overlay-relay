@@ -5,6 +5,12 @@ overlay-config.json
 overlay-server.pid
 overlay-server.json
 
+# Local agent/working notes and dev-only tests, not for publication.
+AGENTS.md
+test-emoji.js
+.agents/
+.codex/
+
 # Common local/editor noise.
 .DS_Store
 Thumbs.db

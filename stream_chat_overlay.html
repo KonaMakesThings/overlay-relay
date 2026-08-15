@@ -3,13 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <title>OverlayRelay</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto:wght@400;700&family=Open+Sans:wght@400;700&family=Nunito:wght@400;700&family=Poppins:wght@400;600&family=Oswald&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto:wght@400;700&family=Open+Sans:wght@400;700&family=Nunito:wght@400;700&family=Poppins:wght@400;600;700&family=Oswald:wght@400;700&display=swap" rel="stylesheet">
 <style>
 /* ─── Root & reset ─────────────────────────────────── */
 :root{
   --ff:'Inter',sans-serif;--fs:14px;--op:1;
   --twbg:rgba(160,120,210,.15);--ytbg:rgba(200,90,90,.15);
-  --sh:1px 1px 3px rgba(0,0,0,.9);--rad:4px;--gap:4px;--cw:100%;
+  --sh:1px 1px 3px rgba(0,0,0,.9);--tsh:1px 1px 3px rgba(0,0,0,.9);--rad:4px;--gap:4px;--cw:100%;
+  --line:calc(var(--fs) * 1.55); /* height of one message line — leading items centre on it */
   --panel:#0e0c1a;--accent:#7c4dff;--card:rgba(255,255,255,.03);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -37,14 +38,19 @@ body.preview-bg{background:#0b0a15!important}
 }
 .msg.dying{opacity:0!important}
 .msg.twitch{background:var(--twbg)}.msg.youtube{background:var(--ytbg)}
-.badges{display:inline-flex;align-items:center;gap:2px;flex-shrink:0;align-self:flex-start;margin-top:.2em}
+/* Leading items align to the FIRST line of the message, not the whole wrapped
+   block, so they use align-self:flex-start and are centred inside one line box.
+   Anything sized in em here resolves against its own font-size — which is why
+   .plat (font-size:.57em) must do its maths in absolute --fs/--line units. */
+.badges{display:inline-flex;align-items:center;gap:2px;flex-shrink:0;align-self:flex-start;height:var(--line)}
 .badges img{width:1.15em;height:1.15em;vertical-align:middle;object-fit:contain}
-.plat{font-size:.57em;border-radius:3px;padding:1px 4px;flex-shrink:0;opacity:.5;letter-spacing:.5px;font-weight:700;align-self:flex-start;margin-top:.32em}
-.uname{font-weight:700;flex-shrink:0;max-width:var(--nw,none);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;align-self:flex-start;margin-top:.15em}
-.colon{margin-right:2px;opacity:.4;flex-shrink:0;align-self:flex-start;margin-top:.15em}
-.text{word-break:break-word;flex:1;font-weight:var(--tfw,400)}
+.plat{font-size:.57em;line-height:1;border-radius:3px;padding:2px 4px;flex-shrink:0;opacity:.5;letter-spacing:.5px;font-weight:700;align-self:flex-start;margin-top:calc((var(--line) - (var(--fs) * .57 + 4px)) / 2);margin-inline-end:calc(var(--fs) * .16 + var(--ow, 0px))}
+/* overflow must stay visible unless truncating, or the outline/shadow is clipped
+   off the first and last glyph; when truncating, --upad buys the shadow room */
+.uname{font-weight:700;flex-shrink:0;max-width:var(--nw,none);overflow:var(--uov,visible);text-overflow:ellipsis;white-space:nowrap;align-self:flex-start;padding-inline:var(--upad,0px);text-shadow:var(--tsh,var(--sh))}
+.colon{margin-right:2px;opacity:.4;flex-shrink:0;align-self:flex-start}
+.text{word-break:break-word;flex:1;font-weight:var(--tfw,400);text-shadow:var(--tsh,var(--sh))}
 .text img.emote{width:1.6em;height:1.6em;vertical-align:middle;margin:0 1px}
-.msg.bold-names .uname{font-weight:800}
 @keyframes popin{from{opacity:0;transform:translateY(5px) scale(.98)}to{opacity:var(--op);transform:none}}
 
 /* ─── Overlay status dot (visible in OBS) ───────────── */
@@ -204,7 +210,6 @@ kbd{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);bord
 </head>
 <body>
 
-<style id="chat-outline-style"></style>
 <!-- OBS activity indicator — proves the overlay is loaded -->
 <div id="obs-dot" title="Overlay active"></div>
 <button id="gear" title="Settings (S)">⚙</button>
@@ -318,14 +323,26 @@ kbd{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);bord
       <div class="f"><label>Font Size <span class="rv" id="fsv">14px</span></label><input type="range" id="fs" min="10" max="30" value="14"></div>
       <div class="f"><label>Message Opacity <span class="rv" id="opv">100%</span></label><input type="range" id="op" min="0" max="100" value="100"></div>
       <div class="f"><label>Background Opacity <span class="rv" id="bav">15%</span></label><input type="range" id="ba" min="0" max="100" value="15"></div>
-      <div class="f"><label>Text Shadow</label>
-        <div class="custom-select" data-setting="ts">
-          <button type="button" class="custom-select-trigger" id="ts-trigger" aria-haspopup="listbox" aria-expanded="false"><span class="custom-select-value">Soft</span><span class="custom-select-arrow">▾</span></button>
-          <div class="custom-select-menu" role="listbox">
-            <button type="button" class="custom-select-option" data-value="1px 1px 3px rgba(0,0,0,.9)">Soft</button>
-            <button type="button" class="custom-select-option" data-value="2px 2px 0 rgba(0,0,0,1)">Hard</button>
-            <button type="button" class="custom-select-option" data-value="0 0 8px rgba(0,0,0,1)">Glow</button>
-            <button type="button" class="custom-select-option" data-value="none">None</button>
+      <div style="border-top:1px solid rgba(255,255,255,.05);border-bottom:1px solid rgba(255,255,255,.05);padding:9px 0;margin:9px 0">
+        <div class="flabel">
+          <label style="font-weight:600;color:rgba(255,255,255,.6)">Legibility over video</label>
+          <button class="ibtn" onclick="ti(this)">?</button>
+        </div>
+        <div class="ibox">Outline wraps the letters in a solid edge — the single most effective setting over bright or busy footage. Shadow adds separation underneath: <strong>Halo</strong> and <strong>Heavy</strong> surround the text evenly, <strong>Hard</strong> offsets it. The two stack, so a small outline plus Soft is usually enough. Use the Preview background toggle to judge both.</div>
+        <div class="f"><label>Outline <span class="rv" id="outlinev">None</span></label>
+          <input type="range" id="outline" min="0" max="5" step="1" value="0">
+        </div>
+        <div class="f" style="margin-bottom:0"><label>Shadow</label>
+          <div class="custom-select" data-setting="ts">
+            <button type="button" class="custom-select-trigger" id="ts-trigger" aria-haspopup="listbox" aria-expanded="false"><span class="custom-select-value">Soft</span><span class="custom-select-arrow">▾</span></button>
+            <div class="custom-select-menu" role="listbox">
+              <button type="button" class="custom-select-option" data-value="1px 1px 3px rgba(0,0,0,.9)">Soft</button>
+              <button type="button" class="custom-select-option" data-value="2px 2px 0 rgba(0,0,0,1)">Hard</button>
+              <button type="button" class="custom-select-option" data-value="0 0 8px rgba(0,0,0,1)">Glow</button>
+              <button type="button" class="custom-select-option" data-value="0 0 3px rgba(0,0,0,1),0 0 6px rgba(0,0,0,.85)">Halo</button>
+              <button type="button" class="custom-select-option" data-value="0 0 2px rgba(0,0,0,1),0 0 5px rgba(0,0,0,1),0 0 10px rgba(0,0,0,.9),2px 2px 4px rgba(0,0,0,1)">Heavy</button>
+              <button type="button" class="custom-select-option" data-value="none">None</button>
+            </div>
           </div>
         </div>
       </div>
@@ -354,10 +371,7 @@ kbd{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);bord
         <div class="trow"><span class="tlbl">Bold message text</span><label class="tog"><input type="checkbox" id="boldtext"><span class="sldr"></span></label></div>
         <div class="trow" style="margin:0"><span class="tlbl">Truncate long usernames</span><label class="tog"><input type="checkbox" id="truncnames"><span class="sldr"></span></label></div>
       </div>
-      <div class="f" style="margin-top:10px"><label>Text Outline <span class="rv" id="outlinev">None</span></label>
-        <input type="range" id="outline" min="0" max="4" step="1" value="0">
-      </div>
-      <div class="f"><label>Username Max Width <span class="rv" id="nwv">Unlimited</span></label>
+      <div class="f" style="margin-top:10px"><label>Username Max Width <span class="rv" id="nwv">Unlimited</span></label>
         <input type="range" id="nw" min="40" max="300" value="300">
       </div>
     </div>
@@ -457,6 +471,14 @@ const NAME_DEFAULT_W=160,NAME_UNLIMITED_W=300;
 
 function $i(id){return document.getElementById(id);}
 function nameLimitLabel(){return S.truncnames?S.nw+'px':'Unlimited';}
+// single source of truth for slider read-outs, so dragging and reloading agree
+function rangeLabel(key,val,u){
+  if(key==='lt')return val?val+'s':'Never';
+  if(key==='cw')return val>=1920?'Full':val+'px';
+  if(key==='outline')return val>0?val+'px':'None';
+  if(key==='nw')return nameLimitLabel();
+  return val+u;
+}
 function setNameLimit(on){
   S.truncnames=on?1:0;
   if(S.truncnames&&(!S.nw||S.nw>=NAME_UNLIMITED_W))S.nw=NAME_DEFAULT_W;
@@ -574,21 +596,42 @@ function watchServerChat(){
   });
 }
 
+// Outline built from offset copies of the glyph rather than -webkit-text-stroke.
+// A stroke follows the letter's own contour, so at sharp vertices (the points of
+// W, V, x, M) the miter join shoots far past the glyph as a spike — and CSS gives
+// no way to round joins on HTML text. Offset shadows have no joins, so they can't
+// spike. Samples are placed evenly around a circle; alpha stays at 1 because
+// overlapping translucent copies would stack into blotchy patches.
+function outlineShadow(width,shadow){
+  const base=shadow&&shadow!=='none'?[shadow]:[];
+  if(!(width>0))return base.length?base.join(','):'none';
+  const steps=12,blur=width>2?1:0,ring=[];
+  for(let i=0;i<steps;i++){
+    const a=2*Math.PI*i/steps;
+    ring.push(`${(Math.cos(a)*width).toFixed(2)}px ${(Math.sin(a)*width).toFixed(2)}px ${blur}px #000`);
+  }
+  // ring first so the chosen shadow sits behind it
+  return ring.concat(base).join(',');
+}
+
 function applyCSS(){
   const r=document.documentElement,a=S.ba/100;
   r.style.setProperty('--ff',S.ff);r.style.setProperty('--fs',S.fs+'px');
   r.style.setProperty('--op',S.op/100);
   r.style.setProperty('--twbg',`rgba(160,120,210,${a})`);
   r.style.setProperty('--ytbg',`rgba(200,90,90,${a})`);
-  r.style.setProperty('--sh',S.ts);r.style.setProperty('--rad',S.br+'px');
+  r.style.setProperty('--sh',S.ts);r.style.setProperty('--tsh',outlineShadow(S.outline,S.ts));
+  r.style.setProperty('--rad',S.br+'px');
   r.style.setProperty('--gap',S.gp+'px');
   r.style.setProperty('--cw',S.cw>=1920?'100%':S.cw+'px');
   r.style.setProperty('--tfw',S.boldtext?'700':'400');
   r.style.setProperty('--nw',S.truncnames?S.nw+'px':'none');
-  // outline = paint-order stroke trick
-  const ow=S.outline;
-  const outlineCSS=ow>0?`-webkit-text-stroke:${ow}px rgba(0,0,0,${Math.min(.95,ow*.22+.4)})`:'';
-  document.getElementById('chat-outline-style').textContent=ow>0?`.msg .uname,.msg .text{-webkit-text-stroke:${ow}px rgba(0,0,0,${Math.min(.95,ow*.22+.4)})}`:'' ;
+  // clipping is only needed when truncating; padding keeps the outline off the clip edge
+  r.style.setProperty('--uov',S.truncnames?'hidden':'visible');
+  r.style.setProperty('--upad',S.truncnames&&S.outline>0?(S.outline+1)+'px':'0px');
+  // outline ink spills this far past the text box — spacing after the platform tag
+  // has to grow with it or the next glyph (an @ on YouTube names) grazes the tag
+  r.style.setProperty('--ow',S.outline+'px');
   $i('chat').className='pos-'+S.cp;
   $i('obs-dot').classList.toggle('hidden',!S.showdot);
 }
@@ -599,14 +642,14 @@ function populateUI(){
   ['ff','ts','cp'].forEach(syncCustomSelect);
   if(S.obsW)$i('obsW').value=S.obsW;if(S.obsH)$i('obsH').value=S.obsH;
   [['fs','fsv','px'],['op','opv','%'],['ba','bav','%'],['br','brv','px'],
-   ['gp','gpv','px'],['mm','mmv',''],['lt','ltv','s'],['cw','cwv','px']].forEach(([id,vid,u])=>{
+   ['gp','gpv','px'],['mm','mmv',''],['lt','ltv','s'],['cw','cwv','px'],
+   ['outline','outlinev','px']].forEach(([id,vid,u])=>{
     $i(id).value=S[id];
-    $i(vid).textContent=id==='lt'?(S[id]?S[id]+'s':'Never'):id==='cw'?(S[id]>=1920?'Full':S[id]+'px'):S[id]+u;
+    $i(vid).textContent=rangeLabel(id,S[id],u);
   });
   ['ptag','ucol','emotes','bttvglobals','showdot','boldtext','truncnames'].forEach(k=>$i(k).checked=!!S[k]);
   $i('bl-on').checked=!!S.blon;
   $i('bl-names').value=S.blnames||'';
-  $i('outline').value=S.outline;$i('outlinev').textContent=S.outline>0?S.outline+'px':'None';
   $i('nw').value=S.nw;$i('nwv').textContent=nameLimitLabel();
   updateBLCount();
   // preview bg (stored locally, never in URL)
@@ -700,10 +743,14 @@ $i('truncnames').onchange=e=>setNameLimit(e.target.checked);
 $i('shortcuts-tog').onchange=e=>{S.shortcuts=e.target.checked?1:0;save();updateShortcutsUI();};
 $i('bl-on').onchange=e=>{S.blon=e.target.checked?1:0;save();};
 $i('bl-names').addEventListener('input',e=>{S.blnames=e.target.value;save();updateBLCount();});
-function updateBLCount(){const n=getBlacklist().length;$i('bl-count').textContent=n?`${n} name${n>1?'s':''} blocked`:'No names blocked';}
-function getBlacklist(){return(S.blnames||'').split('\n').map(x=>x.trim().toLowerCase()).filter(Boolean);}
-rng('outline','outline','px','outlinev');
-$i('outline').addEventListener('input',()=>applyCSS());
+// cached so addMsg doesn't re-split the list on every incoming message
+let blSet=new Set();
+function updateBLCount(){
+  blSet=new Set((S.blnames||'').split('\n').map(x=>x.trim().toLowerCase()).filter(Boolean));
+  const n=blSet.size;
+  $i('bl-count').textContent=n?`${n} name${n>1?'s':''} blocked`:'No names blocked';
+}
+rng('outline','outline','px','outlinev'); // rng already calls applyCSS
 rng('nw','nw','px','nwv');
 $i('nw').addEventListener('input',()=>{
   if(S.nw>=NAME_UNLIMITED_W)S.truncnames=0;
@@ -718,7 +765,7 @@ $i('prevbg').onchange=e=>{document.body.classList.toggle('preview-bg',e.target.c
 function rng(id,key,u,vid){
   $i(id).addEventListener('input',e=>{
     S[key]=+e.target.value;
-    $i(vid).textContent=key==='lt'?(S[key]?S[key]+'s':'Never'):key==='cw'?(S[key]>=1920?'Full':S[key]+'px'):S[key]+u;
+    $i(vid).textContent=rangeLabel(key,S[key],u);
     applyCSS();save();
   });
 }
@@ -736,17 +783,29 @@ $i('appwin').onclick=()=>{
 // ── Chat rendering ────────────────────────────────────
 const chatEl=$i('chat');
 function addMsg(platform,badges,username,color,textParts){
-  if(S.blon&&getBlacklist().includes(username.toLowerCase()))return;
+  if(S.blon&&blSet.has(username.toLowerCase()))return;
   const el=document.createElement('div');el.className=`msg ${platform}`;
   if(S.ptag){const pt=document.createElement('span');pt.className='plat';pt.style.background=platform==='twitch'?'rgba(130,60,230,.22)':'rgba(190,30,30,.18)';pt.textContent=platform==='twitch'?'T':'Y';el.appendChild(pt);}
-  if(badges.length){const bd=document.createElement('span');bd.className='badges';badges.forEach(b=>{const i=document.createElement('img');i.src=YTB[b.img]||b.img;i.alt=b.lbl||'';i.title=b.lbl||'';bd.appendChild(i);});el.appendChild(bd);}
+  if(badges.length){const bd=document.createElement('span');bd.className='badges';badges.forEach(b=>{const i=document.createElement('img');i.src=YTB[b.img]||b.img;i.alt=b.lbl||'';i.title=b.lbl||'';
+    // a badge that fails to load should vanish, not leave a broken-image icon on stream
+    i.onerror=()=>{i.remove();if(!bd.childElementCount)bd.remove();};
+    bd.appendChild(i);});el.appendChild(bd);}
   const un=document.createElement('span');un.className='uname';un.style.color=(S.ucol&&color)?color:(platform==='twitch'?'#c9a0f0':'#f09090');un.textContent=username;un.title=username;el.appendChild(un);
   const col=document.createElement('span');col.className='colon';col.textContent=':';el.appendChild(col);
   const tx=document.createElement('span');tx.className='text';
   if(typeof textParts==='string')tx.textContent=textParts;
-  else textParts.forEach(p=>{if(p.t==='emote'){const i=document.createElement('img');i.className='emote';i.src=p.src||`https://static-cdn.jtvnw.net/emoticons/v2/${p.id}/default/dark/1.0`;i.alt=p.name;i.title=p.name;tx.appendChild(i);}else tx.appendChild(document.createTextNode(p.v));});
+  else textParts.forEach(p=>{
+    if(p.t!=='emote'){tx.appendChild(document.createTextNode(p.v));return;}
+    // p.id is Twitch-only; YouTube parts arrive with a ready-made proxied src
+    const src=p.src||(p.id?`https://static-cdn.jtvnw.net/emoticons/v2/${p.id}/default/dark/1.0`:'');
+    if(!src){tx.appendChild(document.createTextNode(p.name||''));return;}
+    const i=document.createElement('img');i.className='emote';i.src=src;i.alt=p.name;i.title=p.name;
+    // show the emote name rather than a broken-image icon if the CDN fails
+    i.onerror=()=>i.replaceWith(document.createTextNode(p.name||''));
+    tx.appendChild(i);
+  });
   el.appendChild(tx);chatEl.appendChild(el);
-  const all=chatEl.querySelectorAll('.msg');let i=0,ex=all.length-S.mm;while(ex-->0)all[i++].remove();
+  while(chatEl.childElementCount>S.mm)chatEl.firstElementChild.remove();
   if(S.lt>0)setTimeout(()=>{el.classList.add('dying');setTimeout(()=>el.remove(),900);},S.lt*1000);
 }
 
@@ -804,7 +863,10 @@ function parseIRC(raw){let pos=0;const tags={};if(raw[0]==='@'){const sp=raw.ind
 function tStat(msg,cls){$i('tstat').textContent=msg;$i('tdot').className='dot'+(cls?' '+cls:'');updateConnBadge('tw',cls==='ok'?('tw: '+S.tc):'Twitch',cls==='ok');}
 
 function connectTwitch(ch){
-  if(tWS){tWS.close();tWS=null;}if(tPing){clearInterval(tPing);tPing=null;}
+  // detach handlers first — a late onclose from the old socket would otherwise
+  // clear tWS and orphan the new connection
+  if(tWS){tWS.onopen=tWS.onmessage=tWS.onerror=tWS.onclose=null;tWS.close();tWS=null;}
+  if(tPing){clearInterval(tPing);tPing=null;}
   if(!ch){tStat('No channel set','err');return;}
   if(!/^[a-zA-Z0-9_]{1,25}$/.test(ch)){tStat('Invalid channel name','err');return;}
   tStat('Connecting…','busy');updateConnBadge('tw','Connecting…',false);fetchTBadges(null);bttvLoadedCid='';fetchBTTV(null);
@@ -831,7 +893,7 @@ function connectTwitch(ch){
     }
   };
   ws.onerror=()=>tStat('Connection error','err');
-  ws.onclose=()=>{tStat('Disconnected','');updateConnBadge('tw','Twitch',false);tWS=null;};
+  ws.onclose=()=>{clearInterval(tPing);tPing=null;tStat('Disconnected','');updateConnBadge('tw','Twitch',false);tWS=null;};
 }
 $i('tconn').onclick=async()=>{
   S.tc=$i('tc').value.trim();save();
