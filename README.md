@@ -76,13 +76,21 @@ If port `8080` was already in use, the terminal will show the alternate port sel
 Open the overlay URL in a regular browser and select the gear button. You can adjust:
 
 - Font and size
-- Chat position and width
+- Chat position and width, with an option to fit each box to its message
 - Background transparency and corner rounding
 - Message spacing, lifetime, and maximum message count
 - Username colors, badges, emotes, and platform labels
 - A username blacklist for bots or unwanted accounts
 
 Use the Twitch Demo, YouTube Demo, or test-message buttons to preview changes without going live.
+
+### Fitting boxes to short messages
+
+By default every message box stretches to the full **Chat Width**. Turn on **Fit box
+to message** and Chat Width becomes a maximum instead. A short message like "gg" gets
+a short box, and a long message still grows to the maximum and wraps onto the next
+line. The boxes follow the **Chat Anchor** setting, so they line up on the left, on the
+right, or in the centre.
 
 ### Keeping chat readable over video
 

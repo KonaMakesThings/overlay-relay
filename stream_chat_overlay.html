@@ -27,6 +27,13 @@ body.preview-bg{background:#0b0a15!important}
 #chat.pos-left{left:0;right:auto;transform:none}
 #chat.pos-right{right:0;left:auto;transform:none}
 #chat.pos-center{left:50%;transform:translateX(-50%)}
+/* Fit mode: each box hugs its message, and Chat Width becomes the maximum rather
+   than a fixed size. The trailing padding grows with the outline so the ring on
+   the last glyph never reaches the box edge. */
+#chat.fit .msg{width:auto;max-width:100%;padding-inline-end:calc(10px + var(--ow,0px))}
+#chat.fit.pos-left{align-items:flex-start}
+#chat.fit.pos-right{align-items:flex-end}
+#chat.fit.pos-center{align-items:center}
 
 .msg{
   display:flex;align-items:center;flex-wrap:wrap;gap:3px;
@@ -351,6 +358,13 @@ kbd{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);bord
         <div class="f"><label>Gap <span class="rv" id="gpv">4px</span></label><input type="range" id="gp" min="0" max="20" value="4"></div>
       </div>
       <div class="f"><label>Chat Width <span class="rv" id="cwv">Full</span></label><input type="range" id="cw" min="160" max="1920" value="1920"></div>
+      <div class="trow">
+        <div>
+          <div class="tlbl">Fit box to message</div>
+          <div style="font-size:9.5px;color:rgba(255,255,255,.22);margin-top:2px">Short messages get short boxes; Chat Width becomes the maximum</div>
+        </div>
+        <label class="tog"><input type="checkbox" id="fitw"><span class="sldr"></span></label>
+      </div>
       <div class="f"><label>Chat Anchor</label>
         <div class="custom-select" data-setting="cp">
           <button type="button" class="custom-select-trigger" id="cp-trigger" aria-haspopup="listbox" aria-expanded="false"><span class="custom-select-value">Left</span><span class="custom-select-arrow">▾</span></button>
@@ -463,7 +477,7 @@ const DEF={
   ff:"'Inter',sans-serif",fs:14,op:100,ba:15,
   ts:'1px 1px 3px rgba(0,0,0,.9)',br:4,gp:4,cw:1920,cp:'left',
   mm:30,lt:0,ptag:1,ucol:1,emotes:1,bttvglobals:1,showdot:1,obsW:'',obsH:'',
-  boldtext:0,truncnames:0,nw:160,outline:0,shortcuts:1,blon:1,blnames:''
+  boldtext:0,truncnames:0,fitw:0,nw:160,outline:0,shortcuts:1,blon:1,blnames:''
 };
 const S={...DEF};
 let hashUpdateTimer=null;
@@ -632,7 +646,7 @@ function applyCSS(){
   // outline ink spills this far past the text box — spacing after the platform tag
   // has to grow with it or the next glyph (an @ on YouTube names) grazes the tag
   r.style.setProperty('--ow',S.outline+'px');
-  $i('chat').className='pos-'+S.cp;
+  $i('chat').className='pos-'+S.cp+(S.fitw?' fit':'');
   $i('obs-dot').classList.toggle('hidden',!S.showdot);
 }
 
@@ -647,7 +661,7 @@ function populateUI(){
     $i(id).value=S[id];
     $i(vid).textContent=rangeLabel(id,S[id],u);
   });
-  ['ptag','ucol','emotes','bttvglobals','showdot','boldtext','truncnames'].forEach(k=>$i(k).checked=!!S[k]);
+  ['ptag','ucol','emotes','bttvglobals','showdot','boldtext','truncnames','fitw'].forEach(k=>$i(k).checked=!!S[k]);
   $i('bl-on').checked=!!S.blon;
   $i('bl-names').value=S.blnames||'';
   $i('nw').value=S.nw;$i('nwv').textContent=nameLimitLabel();
@@ -739,6 +753,7 @@ document.addEventListener('click',e=>{if(!e.target.closest('.custom-select'))clo
 $i('emotes').onchange=e=>{S.emotes=e.target.checked?1:0;save();fetchBTTV(bttvLoadedCid||null);};
 $i('bttvglobals').onchange=e=>{S.bttvglobals=e.target.checked?1:0;save();fetchBTTV(bttvLoadedCid||null);};
 $i('boldtext').onchange=e=>{S.boldtext=e.target.checked?1:0;applyCSS();save();};
+$i('fitw').onchange=e=>{S.fitw=e.target.checked?1:0;applyCSS();save();};
 $i('truncnames').onchange=e=>setNameLimit(e.target.checked);
 $i('shortcuts-tog').onchange=e=>{S.shortcuts=e.target.checked?1:0;save();updateShortcutsUI();};
 $i('bl-on').onchange=e=>{S.blon=e.target.checked?1:0;save();};
