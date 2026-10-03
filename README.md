@@ -115,6 +115,35 @@ Before each stream:
 
 When you are finished, close the terminal window running the helper or press `Ctrl+C` inside it.
 
+## Updating
+
+To install a newer version, copy it over your existing folder:
+
+1. Close the terminal window running the helper.
+2. Download the latest version as a ZIP:
+   [overlay-relay main.zip](https://github.com/KonaMakesThings/overlay-relay/archive/refs/heads/main.zip)
+3. Open the ZIP. It contains a folder named `overlay-relay-main`. Copy everything
+   **inside** that folder into your existing OverlayRelay folder, and choose
+   **Replace** when Windows asks.
+4. Double-click `start-overlay.bat`.
+5. In OBS, open the OverlayRelay source's properties and select **Refresh cache of
+   current page**.
+
+Your YouTube URL, Twitch channel, and appearance settings are kept, and the OBS URL
+stays the same.
+
+- **Close the helper first.** It only loads its code when it starts, so a helper left
+  running keeps using the old version.
+- **Copy the folder's contents, not the folder.** If you drag `overlay-relay-main`
+  itself into your OverlayRelay folder, the new files end up in a subfolder and are
+  never used.
+
+New options start switched off. To turn one on for OBS, right-click the source, choose
+**Interact**, and change it in the settings panel there.
+
+If you cloned the repository with Git instead, close the helper, run `git pull`, and
+start it again.
+
 ## Troubleshooting
 
 ### Chat does not appear in OBS
